@@ -145,21 +145,73 @@ class AsyncJQuantsClient:
         
         if not self.refresh_token:
             raise ValueError("JQUANTS_REFRESH_TOKEN が設定されていません")
+        
+        # Refresh Token有効期限チェック
+        self._check_refresh_token_expiry()
+    
+    def _check_refresh_token_expiry(self):
+        """Refresh Token有効期限をチェック"""
+        token_created_date = os.getenv('JQUANTS_TOKEN_CREATED_DATE')
+        
+        if not token_created_date:
+            logger.warning("⚠️ JQUANTS_TOKEN_CREATED_DATE が設定されていません。Refresh Token取得日を環境変数に設定することを推奨します。")
+            return
+        
+        try:
+            created = datetime.strptime(token_created_date, "%Y-%m-%d")
+            days_since_created = (datetime.now() - created).days
+            
+            if days_since_created >= 7:
+                logger.error(f"🚨 Refresh Tokenの有効期限が切れています！（{days_since_created}日経過）")
+                logger.error("🔧 対処方法: jQuants APIで新しいRefresh Tokenを取得し、環境変数を更新してください。")
+            elif days_since_created >= 6:
+                logger.warning(f"⚠️ Refresh Tokenの有効期限が明日切れます！（{days_since_created}日経過）")
+                logger.warning("🔧 対処方法: jQuants APIで新しいRefresh Tokenを取得してください。")
+            elif days_since_created >= 5:
+                logger.warning(f"⚠️ Refresh Tokenの有効期限が近づいています（{days_since_created}日経過、残り{7-days_since_created}日）")
+            else:
+                logger.info(f"✅ Refresh Token有効期限: あと{7-days_since_created}日（{days_since_created}日経過）")
+        except ValueError as e:
+            logger.error(f"❌ JQUANTS_TOKEN_CREATED_DATE の形式が不正です（正しい形式: YYYY-MM-DD）: {e}")
     
     async def authenticate(self, session: aiohttp.ClientSession):
-        """認証してIDトークンを取得"""
+        """認証してIDトークンを取得（詳細ログ付き）"""
         try:
             url = f"{self.base_url}/token/auth_refresh"
             params = {"refreshtoken": self.refresh_token}
             
+            logger.info("🔐 jQuants API認証開始...")
+            
             async with session.post(url, params=params) as response:
-                response.raise_for_status()
-                data = await response.json()
-                self.id_token = data["idToken"]
-                logger.info("jQuants API認証成功")
-                return True
+                status_code = response.status
+                
+                if status_code == 200:
+                    data = await response.json()
+                    self.id_token = data["idToken"]
+                    logger.info("✅ jQuants API認証成功（ID Token取得完了）")
+                    return True
+                elif status_code == 400:
+                    error_text = await response.text()
+                    logger.error(f"❌ jQuants API認証失敗 [400 Bad Request]: Refresh Tokenの形式が不正です")
+                    logger.error(f"詳細: {error_text}")
+                    return False
+                elif status_code == 401:
+                    error_text = await response.text()
+                    logger.error(f"❌ jQuants API認証失敗 [401 Unauthorized]: Refresh Tokenが無効または期限切れです")
+                    logger.error(f"詳細: {error_text}")
+                    logger.error("🔧 対処方法: jQuants APIで新しいRefresh Tokenを取得し、環境変数 JQUANTS_REFRESH_TOKEN を更新してください")
+                    return False
+                else:
+                    error_text = await response.text()
+                    logger.error(f"❌ jQuants API認証失敗 [{status_code}]: {error_text}")
+                    return False
+                    
+        except aiohttp.ClientError as e:
+            logger.error(f"❌ jQuants API認証失敗（ネットワークエラー）: {e}")
+            return False
         except Exception as e:
-            logger.error(f"jQuants API認証失敗: {e}")
+            logger.error(f"❌ jQuants API認証失敗（予期しないエラー）: {e}")
+            logger.error(f"エラータイプ: {type(e).__name__}")
             return False
     
     async def get_listed_info(self, session: aiohttp.ClientSession):
