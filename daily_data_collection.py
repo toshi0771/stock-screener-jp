@@ -457,15 +457,25 @@ class ParallelStockScreener:
             if pullback_pct > 30:
                 return None
             
-            # EMAタッチ判定
+            # EMAタッチ判定（4本値のいずれかがEMAにタッチ）
             touched_emas = []
-            tolerance = 0.02
             
-            if abs(current_price - latest['EMA10']) / latest['EMA10'] <= tolerance:
+            # 当日の4本値を取得
+            open_price = latest['Open']
+            high_price = latest['High']
+            low_price = latest['Low']
+            close_price = latest['Close']
+            
+            # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
+            if low_price <= latest['EMA10'] <= high_price:
                 touched_emas.append("10EMA")
-            if abs(current_price - latest['EMA20']) / latest['EMA20'] <= tolerance:
+            
+            # EMA20タッチ判定
+            if low_price <= latest['EMA20'] <= high_price:
                 touched_emas.append("20EMA")
-            if abs(current_price - latest['EMA50']) / latest['EMA50'] <= tolerance:
+            
+            # EMA50タッチ判定
+            if low_price <= latest['EMA50'] <= high_price:
                 touched_emas.append("50EMA")
             
             if not touched_emas:
