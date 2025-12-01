@@ -422,10 +422,15 @@ class ParallelStockScreener:
             return None
     
     async def screen_stock_52week_pullback(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄の52週新高値押し目スクリーニング（EMAフィルター・ストキャスティクスオプション付き）"""
+        """単一銘柄の52週新高値押し目スクリーニング（EMAタッチ・ストキャスオプション付き）"""
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
         market = stock.get("MarketCode", "")
+        
+        # デバッグモード
+        debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
+        debug_stock_code = os.getenv('DEBUG_STOCK_CODE', '')
+        is_debug_target = debug_mode and code == debug_stock_code
         
         try:
             end_date = datetime.now()
@@ -466,6 +471,23 @@ class ParallelStockScreener:
             low_price = latest['Low']
             close_price = latest['Close']
             
+            # デバッグログ
+            if is_debug_target:
+                logger.info(f"\n{'='*60}")
+                logger.info(f"🔍 デバッグ: {name}({code})")
+                logger.info(f"日付: {latest['Date']}")
+                logger.info(f"4本値:")
+                logger.info(f"  始値: {open_price:,.0f}円")
+                logger.info(f"  高値: {high_price:,.0f}円")
+                logger.info(f"  安値: {low_price:,.0f}円")
+                logger.info(f"  終値: {close_price:,.0f}円")
+                logger.info(f"EMA:")
+                logger.info(f"  EMA10: {latest['EMA10']:,.2f}円")
+                logger.info(f"  EMA20: {latest['EMA20']:,.2f}円")
+                logger.info(f"  EMA50: {latest['EMA50']:,.2f}円")
+                logger.info(f"52週高値: {high_52w:,.0f}円")
+                logger.info(f"下落率: {pullback_pct:.2f}%")
+            
             # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
             if low_price <= latest['EMA10'] <= high_price:
                 touched_emas.append("10EMA")
@@ -477,6 +499,14 @@ class ParallelStockScreener:
             # EMA50タッチ判定
             if low_price <= latest['EMA50'] <= high_price:
                 touched_emas.append("50EMA")
+            
+            if is_debug_target:
+                logger.info(f"\nタッチ判定:")
+                logger.info(f"  EMA10タッチ: {low_price} <= {latest['EMA10']:.2f} <= {high_price} → {'✅' if '10EMA' in touched_emas else '❌'}")
+                logger.info(f"  EMA20タッチ: {low_price} <= {latest['EMA20']:.2f} <= {high_price} → {'✅' if '20EMA' in touched_emas else '❌'}")
+                logger.info(f"  EMA50タッチ: {low_price} <= {latest['EMA50']:.2f} <= {high_price} → {'✅' if '50EMA' in touched_emas else '❌'}")
+                logger.info(f"タッチしたEMA: {touched_emas if touched_emas else 'なし'}")
+                logger.info(f"{'='*60}\n")
             
             if not touched_emas:
                 return None
