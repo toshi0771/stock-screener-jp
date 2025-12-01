@@ -14,6 +14,7 @@ from pathlib import Path
 import aiohttp
 import pandas as pd
 from typing import List, Dict, Any, Optional
+import pytz
 
 # ============================================================
 # スクリーニングオプション設定
@@ -433,7 +434,11 @@ class ParallelStockScreener:
         is_debug_target = debug_mode and code == debug_stock_code
         
         try:
-            end_date = datetime.now()
+            # 日本時間で現在日時を取得
+            jst = pytz.timezone('Asia/Tokyo')
+            now_jst = datetime.now(jst)
+            # 当日のデータを取得（timezone-naiveにdatetimeに変換）
+            end_date = now_jst.replace(tzinfo=None)
             start_date = end_date - timedelta(days=365)
             
             df = await self.jq_client.get_prices_daily_quotes(
