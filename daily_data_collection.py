@@ -179,11 +179,12 @@ class AsyncJQuantsClient:
         """認証してIDトークンを取得（詳細ログ付き）"""
         try:
             url = f"{self.base_url}/token/auth_refresh"
-            params = {"refreshtoken": self.refresh_token}
+            data = {"refreshtoken": self.refresh_token}
+            headers = {"Content-Type": "application/json"}
             
             logger.info("🔐 jQuants API認証開始...")
             
-            async with session.post(url, params=params) as response:
+            async with session.post(url, json=data, headers=headers) as response:
                 status_code = response.status
                 
                 if status_code == 200:
