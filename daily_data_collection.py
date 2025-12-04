@@ -182,6 +182,8 @@ class AsyncJQuantsClient:
             params = {"refreshtoken": self.refresh_token}
             
             logger.info("🔐 jQuants API認証開始...")
+            logger.info(f"🔑 Refresh Token長: {len(self.refresh_token) if self.refresh_token else 0}文字")
+            logger.info(f"🔑 Refresh Token先頭: {self.refresh_token[:50] if self.refresh_token else 'None'}...")
             
             async with session.post(url, params=params) as response:
                 status_code = response.status
