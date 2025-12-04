@@ -435,6 +435,11 @@ class ParallelStockScreener:
         debug_stock_code = os.getenv('DEBUG_STOCK_CODE', '')
         is_debug_target = debug_mode and code == debug_stock_code
         
+        # デバッグ：関数に入ったことを確認
+        if is_debug_target:
+            logger.info(f"⚡ DEBUG: screen_stock_52week_pullback() 開始 - {name}({code})")
+            logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
+        
         try:
             # 日本時間で現在日時を取得
             jst = pytz.timezone('Asia/Tokyo')
@@ -481,7 +486,7 @@ class ParallelStockScreener:
             # デバッグログ
             if is_debug_target:
                 logger.info(f"\n{'='*60}")
-                logger.info(f"🔍 デバッグ: {name}({code})")
+                logger.info(f"🔍 デバッグ詳細: {name}({code})")
                 logger.info(f"日付: {latest['Date']}")
                 logger.info(f"4本値:")
                 logger.info(f"  始値: {open_price:,.0f}円")
