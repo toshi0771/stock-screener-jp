@@ -786,6 +786,20 @@ async def main():
         
         logger.info(f"合計: {len(all_stocks)}銘柄")
         
+        # 6954が銘柄リストに含まれているか確認
+        stock_6954 = next((s for s in all_stocks if s.get("Code") == "6954"), None)
+        if stock_6954:
+            logger.info(f"⚡⚡⚡ 6954が銘柄リストに存在: {stock_6954}")
+        else:
+            logger.error(f"❌ 6954が銘柄リストに存在しません！")
+            # 全銘柄リストから検索
+            stock_6954_all = next((s for s in all_stocks_data if s.get("Code") == "6954"), None)
+            if stock_6954_all:
+                logger.info(f"⚡ 6954は全銘柄リストに存在: {stock_6954_all}")
+                logger.info(f"⚡ MarketCode: {stock_6954_all.get('MarketCode')}")
+            else:
+                logger.error(f"❌ 6954は全銘柄リストにも存在しません！")
+        
         # スクリーニング実行
         results = await screener.run_screening(all_stocks)
         
