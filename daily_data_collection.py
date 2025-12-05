@@ -707,15 +707,34 @@ class ParallelStockScreener:
             logger.info("📊 52週新高値押し目スクリーニング 詳細統計")
             logger.info("="*60)
             logger.info(f"📄 処理対象: {stats['total']:,}銘柄")
-            logger.info(f"✅ データ取得成功: {stats['has_data']:,}銘柄 ({stats['has_data']/stats['total']*100:.1f}%)")
+            
+            if stats['total'] > 0:
+                logger.info(f"✅ データ取得成功: {stats['has_data']:,}銘柄 ({stats['has_data']/stats['total']*100:.1f}%)")
+            else:
+                logger.info(f"✅ データ取得成功: {stats['has_data']:,}銘柄")
+            
             logger.info(f"\n🔹 条件別通過状況:")
-            logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄 ({stats['recent_high']/stats['has_data']*100:.2f}%)")
-            logger.info(f"  2️⃣ 30%以内の押し目: {stats['within_30pct']:,}銘柄 ({stats['within_30pct']/stats['recent_high']*100:.2f}% of 条件1通過)")
+            
+            if stats['has_data'] > 0:
+                logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄 ({stats['recent_high']/stats['has_data']*100:.2f}%)")
+            else:
+                logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄")
+            
+            if stats['recent_high'] > 0:
+                logger.info(f"  2️⃣ 30%以内の押し目: {stats['within_30pct']:,}銘柄 ({stats['within_30pct']/stats['recent_high']*100:.2f}% of 条件1通過)")
+            else:
+                logger.info(f"  2️⃣ 30%以内の押し目: {stats['within_30pct']:,}銘柄 (条件1通過が0のため計算不可)")
+            
             logger.info(f"\n🔹 EMAタッチ別統計:")
             logger.info(f"  🔸 10EMAタッチ: {stats['ema10_touch']:,}銘柄")
             logger.info(f"  🔸 20EMAタッチ: {stats['ema20_touch']:,}銘柄")
             logger.info(f"  🔸 50EMAタッチ: {stats['ema50_touch']:,}銘柄")
-            logger.info(f"  ✅ いずれかのEMAタッチ: {stats['any_ema_touch']:,}銘柄 ({stats['any_ema_touch']/stats['within_30pct']*100:.2f}% of 条件2通過)")
+            
+            if stats['within_30pct'] > 0:
+                logger.info(f"  ✅ いずれかのEMAタッチ: {stats['any_ema_touch']:,}銘柄 ({stats['any_ema_touch']/stats['within_30pct']*100:.2f}% of 条件2通過)")
+            else:
+                logger.info(f"  ✅ いずれかのEMAタッチ: {stats['any_ema_touch']:,}銘柄 (条件2通過が0のため計算不可)")
+            
             logger.info(f"\n⭐ 全条件通過: {stats['passed_all']:,}銘柄")
             logger.info("="*60 + "\n")
         
