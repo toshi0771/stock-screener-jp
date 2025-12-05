@@ -474,10 +474,18 @@ class ParallelStockScreener:
             latest = df.iloc[-1]
             current_price = latest['Close']
             
+            # 52週新高値を記録した日を特定
+            high_52w_date_idx = df['High'].tail(260).idxmax()
+            days_since_high = len(df) - 1 - high_52w_date_idx
+            
+            # 条件1: 過去60日以内に52週新高値を更新していること
+            if days_since_high > 60:
+                return None
+            
             # 新高値からの下落率
             pullback_pct = ((high_52w - current_price) / high_52w) * 100
             
-            # 条件: 52週新高値から30%以内の押し目
+            # 条件2: 52週新高値から30%以内の押し目
             if pullback_pct > 30:
                 return None
             
@@ -505,6 +513,7 @@ class ParallelStockScreener:
                 logger.info(f"  EMA20: {latest['EMA20']:,.2f}円")
                 logger.info(f"  EMA50: {latest['EMA50']:,.2f}円")
                 logger.info(f"52週高値: {high_52w:,.0f}円")
+                logger.info(f"52週高値更新日: {df.iloc[high_52w_date_idx]['Date']} ({days_since_high}日前)")
                 logger.info(f"下落率: {pullback_pct:.2f}%")
             
             # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
