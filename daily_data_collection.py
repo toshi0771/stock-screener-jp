@@ -344,9 +344,9 @@ class ParallelStockScreener:
                     latest['EMA20'] >= latest['EMA50']):
                 return None
             
-            # 乖離率フィルター: (株価 - 50EMA) / 株価 <= 30%
+            # 乖離率フィルター: (株価 - 50EMA) / 株価 <= 20%
             divergence_pct = ((latest['Close'] - latest['EMA50']) / latest['Close']) * 100
-            if divergence_pct > 30:
+            if divergence_pct > 20:
                 return None
             
             # 200SMAフィルター適用
