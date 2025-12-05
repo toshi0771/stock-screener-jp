@@ -433,7 +433,14 @@ class ParallelStockScreener:
         # デバッグモード
         debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
         debug_stock_code = os.getenv('DEBUG_STOCK_CODE', '')
-        is_debug_target = debug_mode and code == debug_stock_code
+        # 文字列比較を確実にするため、両方を文字列に変換
+        is_debug_target = debug_mode and str(code) == str(debug_stock_code)
+        
+        # 6954の場合は必ずログ出力（デバッグモード関係なく）
+        if code == "6954":
+            logger.info(f"⚡⚡⚡ 6954検出！ screen_stock_52week_pullback() 開始 - {name}({code})")
+            logger.info(f"⚡ debug_mode={debug_mode}, debug_stock_code='{debug_stock_code}', code='{code}'")
+            logger.info(f"⚡ is_debug_target={is_debug_target}")
         
         # デバッグ：関数に入ったことを確認
         if is_debug_target:
