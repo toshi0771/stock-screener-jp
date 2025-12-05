@@ -426,6 +426,22 @@ class ParallelStockScreener:
     
     async def screen_stock_52week_pullback(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄の52週新高値押し目スクリーニング（EMAタッチ・ストキャスオプション付き）"""
+        # 統計情報用のカウンターを初期化（初回のみ）
+        if not hasattr(self, 'pullback_stats'):
+            self.pullback_stats = {
+                'total': 0,
+                'has_data': 0,
+                'recent_high': 0,
+                'within_30pct': 0,
+                'ema10_touch': 0,
+                'ema20_touch': 0,
+                'ema50_touch': 0,
+                'any_ema_touch': 0,
+                'passed_all': 0
+            }
+        
+        self.pullback_stats['total'] += 1
+        
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
         market = stock.get("MarketCode", "")
@@ -464,6 +480,8 @@ class ParallelStockScreener:
             if df is None or len(df) < 260:
                 return None
             
+            self.pullback_stats['has_data'] += 1
+            
             # EMA計算
             df['EMA10'] = self.calculate_ema(df['Close'], 10)
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
@@ -479,14 +497,18 @@ class ParallelStockScreener:
             days_since_high = len(df) - 1 - high_52w_date_idx
             
             # 条件1: 過去60日以内に52週新高値を更新していること
-            if days_since_high > 60:
+            if days_since_high <= 60:
+                self.pullback_stats['recent_high'] += 1
+            else:
                 return None
             
             # 新高値からの下落率
             pullback_pct = ((high_52w - current_price) / high_52w) * 100
             
             # 条件2: 52週新高値から30%以内の押し目
-            if pullback_pct > 30:
+            if pullback_pct <= 30:
+                self.pullback_stats['within_30pct'] += 1
+            else:
                 return None
             
             # EMAタッチ判定（4本値のいずれかがEMAにタッチ）
@@ -519,14 +541,17 @@ class ParallelStockScreener:
             # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
             if low_price <= latest['EMA10'] <= high_price:
                 touched_emas.append("10EMA")
+                self.pullback_stats['ema10_touch'] += 1
             
             # EMA20タッチ判定
             if low_price <= latest['EMA20'] <= high_price:
                 touched_emas.append("20EMA")
+                self.pullback_stats['ema20_touch'] += 1
             
             # EMA50タッチ判定
             if low_price <= latest['EMA50'] <= high_price:
                 touched_emas.append("50EMA")
+                self.pullback_stats['ema50_touch'] += 1
             
             if is_debug_target:
                 logger.info(f"\nタッチ判定:")
@@ -536,7 +561,9 @@ class ParallelStockScreener:
                 logger.info(f"タッチしたEMA: {touched_emas if touched_emas else 'なし'}")
                 logger.info(f"{'='*60}\n")
             
-            if not touched_emas:
+            if touched_emas:
+                self.pullback_stats['any_ema_touch'] += 1
+            else:
                 return None
             
             # EMAフィルター適用
@@ -555,6 +582,9 @@ class ParallelStockScreener:
             if PULLBACK_STOCHASTIC_FILTER:
                 if stoch_k is None or stoch_k > 20:  # 売られすぎ閾値
                     return None
+            
+            # 全条件通過！
+            self.pullback_stats['passed_all'] += 1
             
             return {
                 "code": code,
@@ -669,6 +699,25 @@ class ParallelStockScreener:
         )
         pb_time = int((datetime.now() - pb_start).total_seconds() * 1000)
         logger.info(f"52週新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
+        
+        # 統計情報を表示
+        if hasattr(self, 'pullback_stats'):
+            stats = self.pullback_stats
+            logger.info("\n" + "="*60)
+            logger.info("📊 52週新高値押し目スクリーニング 詳細統計")
+            logger.info("="*60)
+            logger.info(f"📄 処理対象: {stats['total']:,}銘柄")
+            logger.info(f"✅ データ取得成功: {stats['has_data']:,}銘柄 ({stats['has_data']/stats['total']*100:.1f}%)")
+            logger.info(f"\n🔹 条件別通過状況:")
+            logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄 ({stats['recent_high']/stats['has_data']*100:.2f}%)")
+            logger.info(f"  2️⃣ 30%以内の押し目: {stats['within_30pct']:,}銘柄 ({stats['within_30pct']/stats['recent_high']*100:.2f}% of 条件1通過)")
+            logger.info(f"\n🔹 EMAタッチ別統計:")
+            logger.info(f"  🔸 10EMAタッチ: {stats['ema10_touch']:,}銘柄")
+            logger.info(f"  🔸 20EMAタッチ: {stats['ema20_touch']:,}銘柄")
+            logger.info(f"  🔸 50EMAタッチ: {stats['ema50_touch']:,}銘柄")
+            logger.info(f"  ✅ いずれかのEMAタッチ: {stats['any_ema_touch']:,}銘柄 ({stats['any_ema_touch']/stats['within_30pct']*100:.2f}% of 条件2通過)")
+            logger.info(f"\n⭐ 全条件通過: {stats['passed_all']:,}銘柄")
+            logger.info("="*60 + "\n")
         
         screening_id = self.sb_client.save_screening_result(
             "52week_pullback", datetime.now().strftime('%Y-%m-%d'),
