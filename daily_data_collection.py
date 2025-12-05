@@ -477,7 +477,7 @@ class ParallelStockScreener:
                 end_date.strftime("%Y%m%d")
             )
             
-            if df is None or len(df) < 260:
+            if df is None or len(df) < 200:  # 約8ヶ月分のデータがあればOK
                 return None
             
             self.pullback_stats['has_data'] += 1
@@ -487,13 +487,14 @@ class ParallelStockScreener:
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
             df['EMA50'] = self.calculate_ema(df['Close'], 50)
             
-            # 52週最高値
-            high_52w = df['High'].tail(260).max()
+            # 52週最高値（利用可能なデータの範囲内で計算、最大260日）
+            lookback_days = min(260, len(df))
+            high_52w = df['High'].tail(lookback_days).max()
             latest = df.iloc[-1]
             current_price = latest['Close']
             
             # 52週新高値を記録した日を特定
-            high_52w_date_idx = df['High'].tail(260).idxmax()
+            high_52w_date_idx = df['High'].tail(lookback_days).idxmax()
             days_since_high = len(df) - 1 - high_52w_date_idx
             
             # 条件1: 過去60日以内に52週新高値を更新していること
