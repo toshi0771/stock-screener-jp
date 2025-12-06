@@ -392,7 +392,16 @@
                     <option value="all">全て</option>
                     <option value="10">10%未満</option>
                     <option value="20">20%未満</option>
-                    <option value="30">30%未満</option>
+                </select>
+            </div>
+            
+            <!-- ボリンジャーバンド専用オプション -->
+            <div class="option-group" id="bollingerOptions" style="display: none;">
+                <label class="option-label">σ選択</label>
+                <select class="option-select" id="sigmaSelect">
+                    <option value="all">全て</option>
+                    <option value="upper">+3σ</option>
+                    <option value="lower">-3σ</option>
                 </select>
             </div>
             
@@ -457,6 +466,7 @@
                 const optionsArea = document.getElementById('optionsArea');
                 const perfectOrderOptions = document.getElementById('perfectOrderOptions');
                 const perfectOrderOptions2 = document.getElementById('perfectOrderOptions2');
+                const bollingerOptions = document.getElementById('bollingerOptions');
                 const pullbackOptions = document.getElementById('pullbackOptions');
                 const pullbackOptions2 = document.getElementById('pullbackOptions2');
                 
@@ -471,16 +481,25 @@
                     if (selectedMethod === 'perfect_order') {
                         perfectOrderOptions.style.display = 'block';
                         perfectOrderOptions2.style.display = 'block';
+                        bollingerOptions.style.display = 'none';
+                        pullbackOptions.style.display = 'none';
+                        pullbackOptions2.style.display = 'none';
+                    } else if (selectedMethod === 'bollinger_band') {
+                        perfectOrderOptions.style.display = 'none';
+                        perfectOrderOptions2.style.display = 'none';
+                        bollingerOptions.style.display = 'block';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === '52week_pullback') {
                         perfectOrderOptions.style.display = 'none';
                         perfectOrderOptions2.style.display = 'none';
+                        bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'block';
                         pullbackOptions2.style.display = 'block';
                     } else {
                         perfectOrderOptions.style.display = 'none';
                         perfectOrderOptions2.style.display = 'none';
+                        bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     }
@@ -552,6 +571,11 @@
                     if (selectedMethod === 'perfect_order') {
                         options.sma200 = document.getElementById('sma200Select').value;
                         options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
+                    }
+                    
+                    // ボリンジャーバンドの場合、オプションを追加
+                    if (selectedMethod === 'bollinger_band') {
+                        options.sigma = document.getElementById('sigmaSelect').value;
                     }
                     
                     // 200日新高値押し目の場合、オプションを追加

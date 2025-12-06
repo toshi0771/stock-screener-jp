@@ -172,9 +172,10 @@ def api_screening():
         # オプションパラメータを取得
         sma200_filter = options.get('sma200', 'all')  # パーフェクトオーダー用
         ema50_divergence = options.get('ema50_divergence', 'all')  # パーフェクトオーダー用
+        sigma_filter = options.get('sigma', 'all')  # ボリンジャーバンド用
         use_stochastic = options.get('use_stochastic', False)  # 52週新高値押し目用
         
-        print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, SMA200: {sma200_filter}, EMA50乖離: {ema50_divergence}, ストキャス: {use_stochastic}", file=sys.stderr)
+        print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, SMA200: {sma200_filter}, EMA50乖離: {ema50_divergence}, σ: {sigma_filter}, ストキャス: {use_stochastic}", file=sys.stderr)
         
         # Supabaseから実データを取得
         results = get_latest_screening_results(method, market)
@@ -199,6 +200,11 @@ def api_screening():
                         filtered_results.append(r)
             results = filtered_results
             print(f"   50EMA乖離率フィルター適用後: {len(results)}件", file=sys.stderr)
+        
+        # ボリンジャーバンド: σフィルター適用
+        if method == 'bollinger_band' and sigma_filter != 'all':
+            results = [r for r in results if r.get('touch_direction') == sigma_filter]
+            print(f"   σフィルター適用後: {len(results)}件", file=sys.stderr)
         
         # 52週新高値押し目: タッチEMAフィルター適用
         if method == '52week_pullback' and 'ema_touch' in options and options['ema_touch'] != 'all':
