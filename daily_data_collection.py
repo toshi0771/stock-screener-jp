@@ -122,6 +122,7 @@ class SupabaseClient:
                     "bollinger_middle": stock.get("sma20"),
                     "touch_direction": stock.get("touch_direction", "upper"),
                     "sma_200": stock.get("sma200"),
+                    "sma200_position": stock.get("sma200_position"),
                     "stochastic_k": stock.get("stochastic_k"),
                     "stochastic_d": stock.get("stochastic_d")
                 }
