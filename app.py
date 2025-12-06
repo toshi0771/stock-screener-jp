@@ -390,43 +390,94 @@ def get_history():
                 history_dict[date]['pullback_52week'] = count
                 history_dict[date]['pullback_52week_id'] = result_id
         
-        # 銘柄名を取得
+        # 銘柄名を取得（分類別）
         for date_data in history_dict.values():
-            # パーフェクトオーダーの銘柄取得
+            # パーフェクトオーダーの銘柄取得（sma200_positionで分類）
             if date_data['perfect_order_id']:
                 stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code')\
+                    .select('company_name, stock_code, market, sma200_position')\
                     .eq('screening_result_id', date_data['perfect_order_id'])\
-                    .limit(10)\
                     .execute()
-                stock_names = [f"{s['company_name']}({str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code']})" for s in stocks.data]
-                date_data['perfect_order_stocks'] = ', '.join(stock_names) if stock_names else '-'
+                
+                # sma200_positionで分類
+                above_200sma = []
+                below_200sma = []
+                for s in stocks.data:
+                    stock_info = {
+                        'name': s['company_name'],
+                        'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
+                        'market': s.get('market', '-')
+                    }
+                    if s.get('sma200_position') == 'above':
+                        above_200sma.append(stock_info)
+                    else:
+                        below_200sma.append(stock_info)
+                
+                date_data['perfect_order_above_200sma'] = above_200sma
+                date_data['perfect_order_below_200sma'] = below_200sma
             else:
-                date_data['perfect_order_stocks'] = '-'
+                date_data['perfect_order_above_200sma'] = []
+                date_data['perfect_order_below_200sma'] = []
             
-            # ボリンジャーバンドの銘柄取得
+            # ボリンジャーバンドの銘柄取得（sigmaで分類）
             if date_data['bollinger_band_id']:
                 stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code')\
+                    .select('company_name, stock_code, market, sigma')\
                     .eq('screening_result_id', date_data['bollinger_band_id'])\
-                    .limit(10)\
                     .execute()
-                stock_names = [f"{s['company_name']}({str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code']})" for s in stocks.data]
-                date_data['bollinger_band_stocks'] = ', '.join(stock_names) if stock_names else '-'
+                
+                # sigmaで分類
+                plus_3sigma = []
+                minus_3sigma = []
+                for s in stocks.data:
+                    stock_info = {
+                        'name': s['company_name'],
+                        'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
+                        'market': s.get('market', '-')
+                    }
+                    if s.get('sigma') == '+3':
+                        plus_3sigma.append(stock_info)
+                    elif s.get('sigma') == '-3':
+                        minus_3sigma.append(stock_info)
+                
+                date_data['bollinger_plus_3sigma'] = plus_3sigma
+                date_data['bollinger_minus_3sigma'] = minus_3sigma
             else:
-                date_data['bollinger_band_stocks'] = '-'
+                date_data['bollinger_plus_3sigma'] = []
+                date_data['bollinger_minus_3sigma'] = []
             
-            # 52週新高値押し目の銘柄取得
+            # 200日新高値押し目の銘柄取得（ema_touchで分類）
             if date_data['pullback_52week_id']:
                 stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code')\
+                    .select('company_name, stock_code, market, ema_touch')\
                     .eq('screening_result_id', date_data['pullback_52week_id'])\
-                    .limit(10)\
                     .execute()
-                stock_names = [f"{s['company_name']}({str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code']})" for s in stocks.data]
-                date_data['pullback_52week_stocks'] = ', '.join(stock_names) if stock_names else '-'
+                
+                # ema_touchで分類
+                ema10_stocks = []
+                ema20_stocks = []
+                ema50_stocks = []
+                for s in stocks.data:
+                    stock_info = {
+                        'name': s['company_name'],
+                        'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
+                        'market': s.get('market', '-')
+                    }
+                    ema_touch = s.get('ema_touch', '')
+                    if '10EMA' in ema_touch:
+                        ema10_stocks.append(stock_info)
+                    if '20EMA' in ema_touch:
+                        ema20_stocks.append(stock_info)
+                    if '50EMA' in ema_touch:
+                        ema50_stocks.append(stock_info)
+                
+                date_data['pullback_10ema'] = ema10_stocks
+                date_data['pullback_20ema'] = ema20_stocks
+                date_data['pullback_50ema'] = ema50_stocks
             else:
-                date_data['pullback_52week_stocks'] = '-'
+                date_data['pullback_10ema'] = []
+                date_data['pullback_20ema'] = []
+                date_data['pullback_50ema'] = []
         
         # リストに変換してソート
         history_list = sorted(history_dict.values(), key=lambda x: x['date'], reverse=True)
