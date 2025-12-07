@@ -419,30 +419,31 @@ def get_history():
                 date_data['perfect_order_above_200sma'] = []
                 date_data['perfect_order_below_200sma'] = []
             
-            # ボリンジャーバンドの銘柄取得（sigmaで分類）
-            if date_data['bollinger_band_id']:
-                stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code, market, sigma')\
-                    .eq('screening_result_id', date_data['bollinger_band_id'])\
+                # ボリンジャーバンドの銘柄取得（touch_directionで分類）
+            try:
+                bollinger_stocks = supabase.table('detected_stocks')\
+                    .select('company_name, stock_code, market, touch_direction')\
+                    .eq('screening_result_id', result_id)\
+                    .eq('method', 'bollinger_band')\
                     .execute()
-                
-                # sigmaで分類
+                # touch_directionで分類
                 plus_3sigma = []
                 minus_3sigma = []
-                for s in stocks.data:
+                for s in bollinger_stocks.data:
                     stock_info = {
-                        'name': s['company_name'],
                         'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
-                        'market': s.get('market', '-')
+                        'company_name': s['company_name']
                     }
-                    if s.get('sigma') == '+3':
+                    touch_dir = s.get('touch_direction')
+                    if touch_dir == '+3σ' or touch_dir == 'upper':
                         plus_3sigma.append(stock_info)
-                    elif s.get('sigma') == '-3':
+                    elif touch_dir == '-3σ' or touch_dir == 'lower':
                         minus_3sigma.append(stock_info)
                 
                 date_data['bollinger_plus_3sigma'] = plus_3sigma
                 date_data['bollinger_minus_3sigma'] = minus_3sigma
-            else:
+            except Exception as e:
+                print(f"   ボリンジャーバンド銘柄取得エラー: {e}", file=sys.stderr)
                 date_data['bollinger_plus_3sigma'] = []
                 date_data['bollinger_minus_3sigma'] = []
             
