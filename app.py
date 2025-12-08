@@ -404,9 +404,8 @@ def get_history():
                 below_200sma = []
                 for s in stocks.data:
                     stock_info = {
-                        'name': s['company_name'],
                         'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
-                        'market': s.get('market', '-')
+                        'company_name': s['company_name']
                     }
                     if s.get('sma200_position') == 'above':
                         above_200sma.append(stock_info)
@@ -447,24 +446,23 @@ def get_history():
                 date_data['bollinger_plus_3sigma'] = []
                 date_data['bollinger_minus_3sigma'] = []
             
-            # 200日新高値押し目の銘柄取得（ema_touchで分類）
+            # 200日新高値押し目の銘柄取得（touch_emaで分類）
             if date_data['pullback_52week_id']:
                 stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code, market, ema_touch')\
+                    .select('company_name, stock_code, market, touch_ema')\
                     .eq('screening_result_id', date_data['pullback_52week_id'])\
                     .execute()
                 
-                # ema_touchで分類
+                # touch_emaで分類
                 ema10_stocks = []
                 ema20_stocks = []
                 ema50_stocks = []
                 for s in stocks.data:
                     stock_info = {
-                        'name': s['company_name'],
                         'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
-                        'market': s.get('market', '-')
+                        'company_name': s['company_name']
                     }
-                    ema_touch = s.get('ema_touch', '')
+                    ema_touch = s.get('touch_ema', '')
                     if '10EMA' in ema_touch:
                         ema10_stocks.append(stock_info)
                     if '20EMA' in ema_touch:
