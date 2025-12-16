@@ -23,7 +23,7 @@ import pytz
 # パーフェクトオーダーオプション
 PERFECT_ORDER_SMA200_FILTER = "all"  # "above" (200SMAより上), "below" (200SMAより下), "all" (全て)
 
-# 52週新高値押し目オプション
+# 200日新高値押し目オプション
 PULLBACK_EMA_FILTER = "all"  # "10ema", "20ema", "50ema", "all" (いずれか)
 PULLBACK_STOCHASTIC_FILTER = False  # True: ストキャス売られすぎのみ, False: 全て
 
@@ -425,8 +425,8 @@ class ParallelStockScreener:
             logger.debug(f"スクリーニングエラー [{code}]: {e}")
             return None
     
-    async def screen_stock_52week_pullback(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄の52週新高値押し目スクリーニング（EMAタッチ・ストキャスオプション付き）"""
+    async def screen_stock_200day_pullback(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
+        """単一銘柄の200日新高値押し目スクリーニング（EMAタッチ・ストキャスオプション付き）"""
         # 統計情報用のカウンターを初期化（初回のみ）
         if not hasattr(self, 'pullback_stats'):
             self.pullback_stats = {
@@ -455,13 +455,13 @@ class ParallelStockScreener:
         
         # 6954の場合は必ずログ出力（デバッグモード関係なく）
         if code == "6954":
-            logger.info(f"⚡⚡⚡ 6954検出！ screen_stock_52week_pullback() 開始 - {name}({code})")
+            logger.info(f"⚡⚡⚡ 6954検出！ screen_stock_200day_pullback() 開始 - {name}({code})")
             logger.info(f"⚡ debug_mode={debug_mode}, debug_stock_code='{debug_stock_code}', code='{code}'")
             logger.info(f"⚡ is_debug_target={is_debug_target}")
         
         # デバッグ：関数に入ったことを確認
         if is_debug_target:
-            logger.info(f"⚡ DEBUG: screen_stock_52week_pullback() 開始 - {name}({code})")
+            logger.info(f"⚡ DEBUG: screen_stock_200day_pullback() 開始 - {name}({code})")
             logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
         
         try:
@@ -652,8 +652,8 @@ class ParallelStockScreener:
         logger.info("=" * 60)
         logger.info("スクリーニングオプション設定:")
         logger.info(f"  - パーフェクトオーダー 200SMAフィルター: {PERFECT_ORDER_SMA200_FILTER}")
-        logger.info(f"  - 52週新高値押し目 EMAフィルター: {PULLBACK_EMA_FILTER}")
-        logger.info(f"  - 52週新高値押し目 ストキャスティクス: {'ON' if PULLBACK_STOCHASTIC_FILTER else 'OFF'}")
+        logger.info(f"  - 200日新高値押し目 EMAフィルター: {PULLBACK_EMA_FILTER}")
+        logger.info(f"  - 200日新高値押し目 ストキャスティクス: {'ON' if PULLBACK_STOCHASTIC_FILTER else 'OFF'}")
         logger.info("=" * 60)
         
         start_time = datetime.now()
@@ -692,21 +692,21 @@ class ParallelStockScreener:
         if screening_id:
             self.sb_client.save_detected_stocks(screening_id, bollinger_band)
         
-        # 52週新高値押し目
+        # 200日新高値押し目
         logger.info("=" * 60)
-        logger.info("52週新高値押し目スクリーニング開始")
+        logger.info("200日新高値押し目スクリーニング開始")
         pb_start = datetime.now()
         week52_pullback = await self.process_stocks_batch(
-            stocks, self.screen_stock_52week_pullback, "52週新高値押し目"
+            stocks, self.screen_stock_200day_pullback, "200日新高値押し目"
         )
         pb_time = int((datetime.now() - pb_start).total_seconds() * 1000)
-        logger.info(f"52週新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
+        logger.info(f"200日新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
         
         # 統計情報を表示
         if hasattr(self, 'pullback_stats'):
             stats = self.pullback_stats
             logger.info("\n" + "="*60)
-            logger.info("📊 52週新高値押し目スクリーニング 詳細統計")
+            logger.info("📊 200日新高値押し目スクリーニング 詳細統計")
             logger.info("="*60)
             logger.info(f"📄 処理対象: {stats['total']:,}銘柄")
             
@@ -741,7 +741,7 @@ class ParallelStockScreener:
             logger.info("="*60 + "\n")
         
         screening_id = self.sb_client.save_screening_result(
-            "52week_pullback", datetime.now().strftime('%Y-%m-%d'),
+            "200day_pullback", datetime.now().strftime('%Y-%m-%d'),
             len(week52_pullback), pb_time
         )
         if screening_id:
@@ -763,7 +763,7 @@ class ParallelStockScreener:
             },
             "perfect_order": perfect_order,
             "bollinger_band": bollinger_band,
-            "52week_pullback": week52_pullback
+            "200day_pullback": week52_pullback
         }
 
 
@@ -817,14 +817,14 @@ class HistoryManager:
             "avg_detections": {
                 "perfect_order": 0,
                 "bollinger_band": 0,
-                "52week_pullback": 0
+                "200day_pullback": 0
             }
         }
         
         for data in history.values():
             stats["avg_detections"]["perfect_order"] += len(data.get("perfect_order", []))
             stats["avg_detections"]["bollinger_band"] += len(data.get("bollinger_band", []))
-            stats["avg_detections"]["52week_pullback"] += len(data.get("52week_pullback", []))
+            stats["avg_detections"]["200day_pullback"] += len(data.get("200day_pullback", []))
         
         days = len(history)
         for key in stats["avg_detections"]:
@@ -896,7 +896,7 @@ async def main():
             logger.info(f"平均検出数:")
             logger.info(f"  - パーフェクトオーダー: {stats['avg_detections']['perfect_order']}銘柄/日")
             logger.info(f"  - ボリンジャーバンド: {stats['avg_detections']['bollinger_band']}銘柄/日")
-            logger.info(f"  - 52週新高値押し目: {stats['avg_detections']['52week_pullback']}銘柄/日")
+            logger.info(f"  - 200日新高値押し目: {stats['avg_detections']['200day_pullback']}銘柄/日")
         
         logger.info("=" * 60)
         logger.info("日次データ収集完了")

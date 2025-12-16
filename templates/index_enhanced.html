@@ -318,7 +318,7 @@
     <div class="container">
         <header>
             <h1>📊 株式スクリーニング</h1>
-            <p class="subtitle">パーフェクトオーダー・ボリンジャーバンド・52週新高値押し目検出</p>
+            <p class="subtitle">パーフェクトオーダー・ボリンジャーバンド・200日新高値押し目検出</p>
             
             <div class="status-bar">
                 <div class="status-item">
@@ -340,8 +340,8 @@
                 <h3>📈 ボリンジャーバンド</h3>
                 <p>±3σタッチ検出</p>
             </div>
-            <div class="tab" data-tab="52week_pullback">
-                <h3>🚀 52週新高値押し目</h3>
+            <div class="tab" data-tab="200day_pullback">
+                <h3>🚀 200日新高値押し目</h3>
                 <p>新高値後のEMAタッチ</p>
             </div>
         </div>
@@ -405,9 +405,9 @@
                 
                 // フィルター表示切り替え
                 document.getElementById('ema-filter-group').style.display = 
-                    currentTab === '52week_pullback' ? 'block' : 'none';
+                    currentTab === '200day_pullback' ? 'block' : 'none';
                 document.getElementById('stochastic-filter-group').style.display = 
-                    currentTab === '52week_pullback' ? 'block' : 'none';
+                    currentTab === '200day_pullback' ? 'block' : 'none';
                 
                 // 結果をクリア
                 document.getElementById('results-container').innerHTML = `
@@ -495,7 +495,7 @@
                 html += '<th>銘柄コード</th><th>銘柄名</th><th>市場</th><th>株価</th><th>10EMA</th><th>20EMA</th><th>50EMA</th><th>出来高</th>';
             } else if (currentTab === 'bollinger_band') {
                 html += '<th>銘柄コード</th><th>銘柄名</th><th>市場</th><th>株価</th><th>SMA20</th><th>上限3σ</th><th>下限3σ</th><th>シグナル</th>';
-            } else if (currentTab === '52week_pullback') {
+            } else if (currentTab === '200day_pullback') {
                 html += '<th>銘柄コード</th><th>銘柄名</th><th>市場</th><th>株価</th><th>52週高値</th><th>押し目率</th><th>タッチEMA</th><th>高値日</th>';
             }
 
@@ -533,7 +533,7 @@
                         <td>¥${r.lower_3sigma.toLocaleString()}</td>
                         <td>${signalBadge}</td>
                     `;
-                } else if (currentTab === '52week_pullback') {
+                } else if (currentTab === '200day_pullback') {
                     html += `
                         <td>${r.code}</td>
                         <td>${r.name}</td>

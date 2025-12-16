@@ -374,10 +374,10 @@ def get_history():
                     'date': date,
                     'perfect_order': 0,
                     'bollinger_band': 0,
-                    'pullback_52week': 0,
+                    'pullback_200day': 0,
                     'perfect_order_id': None,
                     'bollinger_band_id': None,
-                    'pullback_52week_id': None
+                    'pullback_200day_id': None
                 }
             
             if screening_type == 'perfect_order':
@@ -386,9 +386,9 @@ def get_history():
             elif screening_type == 'bollinger_band':
                 history_dict[date]['bollinger_band'] = count
                 history_dict[date]['bollinger_band_id'] = result_id
-            elif screening_type == '52week_pullback':
-                history_dict[date]['pullback_52week'] = count
-                history_dict[date]['pullback_52week_id'] = result_id
+            elif screening_type == '200day_pullback':
+                history_dict[date]['pullback_200day'] = count
+                history_dict[date]['pullback_200day_id'] = result_id
         
         # 銘柄名を取得（分類別）
         for date_data in history_dict.values():
@@ -447,10 +447,10 @@ def get_history():
                 date_data['bollinger_minus_3sigma'] = []
             
             # 200日新高値押し目の銘柄取得（touch_emaで分類）
-            if date_data['pullback_52week_id']:
+            if date_data['pullback_200day_id']:
                 stocks = supabase.table('detected_stocks')\
                     .select('company_name, stock_code, market, touch_ema')\
-                    .eq('screening_result_id', date_data['pullback_52week_id'])\
+                    .eq('screening_result_id', date_data['pullback_200day_id'])\
                     .execute()
                 
                 # touch_emaで分類

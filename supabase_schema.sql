@@ -53,7 +53,7 @@ CREATE TABLE IF NOT EXISTS detected_stocks (
     ema_50 DECIMAL(10,2),
     sma_200 DECIMAL(10,2),
     
-    -- 52週新高値押し目検出用
+    -- 200日新高値押し目検出用
     week52_high DECIMAL(10,2),
     week52_high_date DATE,
     touch_date DATE,

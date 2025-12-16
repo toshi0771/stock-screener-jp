@@ -1,5 +1,5 @@
 """
-52週新高値押し目統合スクリーニングエンジン
+200日新高値押し目統合スクリーニングエンジン
 52週新高値検出、EMAタッチ判定、ストキャスティクスを統合
 """
 
@@ -10,7 +10,7 @@ from stochastic_detector import StochasticDetector
 
 
 class PullbackScreener:
-    """52週新高値押し目統合スクリーナー"""
+    """200日新高値押し目統合スクリーナー"""
     
     def __init__(self):
         self.high_detector = Week52HighDetector()
@@ -19,7 +19,7 @@ class PullbackScreener:
     
     def screen(self, df, market_filter='all', ema_filter='all', stochastic_oversold=False):
         """
-        52週新高値押し目スクリーニングを実行
+        200日新高値押し目スクリーニングを実行
         
         Parameters:
         -----------
