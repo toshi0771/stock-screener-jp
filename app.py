@@ -129,12 +129,13 @@ def get_latest_screening_results(screening_type, market='all'):
                     'lower3': float(stock['bollinger_lower']) if stock['bollinger_lower'] else None,
                     'touch_direction': stock['touch_direction']
                 })
-            elif screening_type == '52week_pullback':
+            elif screening_type == '200day_pullback':
                 result.update({
                     'ema10': float(stock['ema_10']) if stock['ema_10'] else None,
                     'ema20': float(stock['ema_20']) if stock['ema_20'] else None,
                     'ema50': float(stock['ema_50']) if stock['ema_50'] else None,
                     'week52_high': float(stock['week52_high']) if stock['week52_high'] else None,
+                    'pullback_percentage': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
                     'ema_touch': stock['touch_ema'],
                     'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
                     'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None

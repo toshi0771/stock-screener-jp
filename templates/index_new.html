@@ -668,7 +668,7 @@
                         } else if (selectedMethod === 'bollinger_band') {
                             html += '<th>SMA20</th><th>上限3σ</th><th>下限3σ</th>';
                         } else if (selectedMethod === '200day_pullback') {
-                            html += '<th>52週高値</th><th>押し目率</th><th>タッチEMA</th>';
+                            html += '<th>200日高値</th><th>押し目率</th><th>タッチEMA</th>';
                         }
                         
                         html += '</tr></thead><tbody>';
@@ -697,8 +697,8 @@
                                 html += `<td>${stock.upper_3sigma ? stock.upper_3sigma.toFixed(2) : '-'}</td>`;
                                 html += `<td>${stock.lower_3sigma ? stock.lower_3sigma.toFixed(2) : '-'}</td>`;
                             } else if (selectedMethod === '200day_pullback') {
-                                html += `<td>${stock.high_52week ? stock.high_52week.toFixed(2) : '-'}</td>`;
-                                html += `<td>${stock.pullback_pct ? stock.pullback_pct.toFixed(2) + '%' : '-'}</td>`;
+                                html += `<td>${stock.week52_high ? stock.week52_high.toLocaleString() : '-'}</td>`;
+                                html += `<td>${stock.pullback_percentage ? stock.pullback_percentage.toFixed(2) + '%' : '-'}</td>`;
                                 html += `<td>${stock.ema_touch || '-'}</td>`;
                             }
                             
