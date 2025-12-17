@@ -188,12 +188,12 @@ async def test_fanuc_detection():
         if touched_emas:
             print(f"✅ タッチしたEMA: {', '.join(touched_emas)}")
             if pullback_pct <= 30:
-                print(f"✅ 52週新高値押し目として検出されるべき")
+                print(f"✅ 200日新高値押し目として検出されるべき")
             else:
                 print(f"❌ 52週高値から30%以上下落のため検出されない")
         else:
             print(f"❌ どのEMAにもタッチしていない")
-            print(f"❌ 52週新高値押し目として検出されない")
+            print(f"❌ 200日新高値押し目として検出されない")
         
         print(f"{'='*80}\n")
 

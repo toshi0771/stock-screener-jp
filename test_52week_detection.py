@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-52週新高値押し目検出のテストスクリプト
+200日新高値押し目検出のテストスクリプト
 養命酒（2540）、旭硝子（5201）、東洋製罐（5901）で動作確認
 """
 
@@ -22,7 +22,7 @@ from daily_data_collection import AsyncJQuantsClient, ParallelStockScreener
 
 
 async def test_52week_detection():
-    """52週新高値押し目検出のテスト"""
+    """200日新高値押し目検出のテスト"""
     
     # テスト対象銘柄
     test_stocks = [

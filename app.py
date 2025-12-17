@@ -173,7 +173,7 @@ def api_screening():
         sma200_filter = options.get('sma200', 'all')  # パーフェクトオーダー用
         ema50_divergence = options.get('ema50_divergence', 'all')  # パーフェクトオーダー用
         sigma_filter = options.get('sigma', 'all')  # ボリンジャーバンド用
-        use_stochastic = options.get('use_stochastic', False)  # 52週新高値押し目用
+        use_stochastic = options.get('use_stochastic', False)  # 200日新高値押し目用
         
         print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, SMA200: {sma200_filter}, EMA50乖離: {ema50_divergence}, σ: {sigma_filter}, ストキャス: {use_stochastic}", file=sys.stderr)
         
@@ -206,14 +206,14 @@ def api_screening():
             results = [r for r in results if r.get('touch_direction') == sigma_filter]
             print(f"   σフィルター適用後: {len(results)}件", file=sys.stderr)
         
-        # 52週新高値押し目: タッチEMAフィルター適用
-        if method == '52week_pullback' and 'ema_touch' in options and options['ema_touch'] != 'all':
+        # 200日新高値押し目: タッチEMAフィルター適用
+        if method == '200day_pullback' and 'ema_touch' in options and options['ema_touch'] != 'all':
             ema_touch_filter = options['ema_touch']
             results = [r for r in results if r.get('ema_touch') == ema_touch_filter]
             print(f"   タッチEMAフィルター適用後: {len(results)}件", file=sys.stderr)
         
-        # 52週新高値押し目: ストキャスティクスフィルター適用
-        if method == '52week_pullback' and use_stochastic:
+        # 200日新高値押し目: ストキャスティクスフィルター適用
+        if method == '200day_pullback' and use_stochastic:
             # ストキャスティクスKが20以下の銘柄のみ抜き出し
             results = [r for r in results if r.get('stochastic_k') is not None and r.get('stochastic_k') <= 20]
             print(f"   ストキャスティクスフィルター適用後: {len(results)}件", file=sys.stderr)
