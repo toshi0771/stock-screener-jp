@@ -125,8 +125,9 @@ def get_latest_screening_results(screening_type, market='all'):
                 })
             elif screening_type == 'bollinger_band':
                 result.update({
-                    'upper3': float(stock['bollinger_upper']) if stock['bollinger_upper'] else None,
-                    'lower3': float(stock['bollinger_lower']) if stock['bollinger_lower'] else None,
+                    'sma20': float(stock['bollinger_middle']) if stock['bollinger_middle'] else None,
+                    'upper_3sigma': float(stock['bollinger_upper']) if stock['bollinger_upper'] else None,
+                    'lower_3sigma': float(stock['bollinger_lower']) if stock['bollinger_lower'] else None,
                     'touch_direction': stock['touch_direction']
                 })
             elif screening_type == '200day_pullback':
