@@ -98,42 +98,52 @@ class SupabaseClient:
             return None
     
     def save_detected_stocks(self, screening_result_id, stocks):
-        """検出された銘柄の詳細を保存"""
+        """検出された銘柄の詳細を保存（バッチINSERT）"""
         if not self.enabled or not screening_result_id:
             return False
         
+        if not stocks or len(stocks) == 0:
+            logger.warning("保存する銘柄がありません")
+            return False
+        
         try:
+            # バッチ用データリストを作成
+            data_list = []
             for stock in stocks:
                 data = {
                     "screening_result_id": screening_result_id,
-                    "stock_code": stock.get("code"),
-                    "company_name": stock.get("name"),
-                    "market": stock.get("market"),
-                    "close_price": stock.get("price") or stock.get("close"),
-                    "volume": stock.get("volume", 0),
-                    "ema_10": stock.get("ema10") or stock.get("ema_10"),
-                    "ema_20": stock.get("ema20") or stock.get("ema_20"),
-                    "ema_50": stock.get("ema50") or stock.get("ema_50"),
-                    "week52_high": stock.get("high_52week"),
-                    "touch_ema": stock.get("touched_emas") or stock.get("ema_touch"),
-                    "pullback_percentage": stock.get("pullback_pct"),
-                    "bollinger_upper": stock.get("upper_3sigma"),
-                    "bollinger_lower": stock.get("lower_3sigma"),
-                    "bollinger_middle": stock.get("sma20"),
-                    "touch_direction": stock.get("touch_direction", "upper"),
-                    "sma_200": stock.get("sma200"),
-                    "sma200_position": stock.get("sma200_position"),
-                    "stochastic_k": stock.get("stochastic_k"),
-                    "stochastic_d": stock.get("stochastic_d")
+                    "stock_code": str(stock.get("code", "")),
+                    "company_name": str(stock.get("name", "")),
+                    "market": str(stock.get("market", "")),
+                    "close_price": float(stock.get("price") or stock.get("close") or 0),
+                    "volume": int(stock.get("volume", 0)),
+                    "ema_10": float(stock.get("ema10") or stock.get("ema_10") or 0) if (stock.get("ema10") or stock.get("ema_10")) else None,
+                    "ema_20": float(stock.get("ema20") or stock.get("ema_20") or 0) if (stock.get("ema20") or stock.get("ema_20")) else None,
+                    "ema_50": float(stock.get("ema50") or stock.get("ema_50") or 0) if (stock.get("ema50") or stock.get("ema_50")) else None,
+                    "week52_high": float(stock.get("high_52week") or 0) if stock.get("high_52week") else None,
+                    "touch_ema": str(stock.get("touched_emas") or stock.get("ema_touch") or "") if (stock.get("touched_emas") or stock.get("ema_touch")) else None,
+                    "pullback_percentage": float(stock.get("pullback_pct") or 0) if stock.get("pullback_pct") else None,
+                    "bollinger_upper": float(stock.get("upper_3sigma") or 0) if stock.get("upper_3sigma") else None,
+                    "bollinger_lower": float(stock.get("lower_3sigma") or 0) if stock.get("lower_3sigma") else None,
+                    "bollinger_middle": float(stock.get("sma20") or 0) if stock.get("sma20") else None,
+                    "touch_direction": str(stock.get("touch_direction", "upper")),
+                    "sma_200": float(stock.get("sma200") or 0) if stock.get("sma200") else None,
+                    "sma200_position": str(stock.get("sma200_position", "")) if stock.get("sma200_position") else None,
+                    "stochastic_k": float(stock.get("stochastic_k") or 0) if stock.get("stochastic_k") else None,
+                    "stochastic_d": float(stock.get("stochastic_d") or 0) if stock.get("stochastic_d") else None
                 }
-                
-                self.client.table("detected_stocks").insert(data).execute()
+                data_list.append(data)
+            
+            # バッチINSERT（一括保存）
+            self.client.table("detected_stocks").insert(data_list).execute()
             
             logger.info(f"Supabase詳細保存成功: {len(stocks)}銘柄")
             return True
             
         except Exception as e:
             logger.error(f"Supabase詳細保存エラー: {e}")
+            import traceback
+            logger.error(traceback.format_exc())
             return False
 
 
