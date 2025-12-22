@@ -85,6 +85,7 @@ def get_latest_screening_results(screening_type, market='all'):
         detected_stocks = supabase.table('detected_stocks')\
             .select('*')\
             .eq('screening_result_id', screening_result_id)\
+            .limit(10000)\
             .execute()
         
         print(f"   検出銘柄数: {len(detected_stocks.data)}件", file=sys.stderr)
@@ -274,6 +275,7 @@ def api_historical():
         detected_stocks = supabase.table('detected_stocks')\
             .select('*')\
             .eq('screening_result_id', screening_result_id)\
+            .limit(10000)\
             .execute()
         
         # 結果を整形
