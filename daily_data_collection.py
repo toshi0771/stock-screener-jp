@@ -267,8 +267,64 @@ class AsyncJQuantsClient:
             return None
 
 
-class ParallelStockScreener:
-    """並列株式スクリーニング実行クラス"""
+def sample_stocks_balanced(stocks, max_per_range=10):
+    """
+    銘柄コード帯別・市場別にバランスよくサンプリング
+    
+    Args:
+        stocks: 検出銘柄のリスト
+        max_per_range: 各銘柄コード帯から抽出する最大銘柄数
+    
+    Returns:
+        サンプリングされた銘柄のリスト
+    """
+    if not stocks or len(stocks) <= 100:
+        return stocks  # 100銘柄以下ならそのまま返す
+    
+    # 銘柄コード帯別・市場別に分類
+    ranges = {}
+    
+    for stock in stocks:
+        code = str(stock.get('code', '0000'))
+        # 銘柄コードの先頭1桁を取得（1000番台、2000番台...）
+        if len(code) >= 4:
+            range_key = f"{code[0]}000"
+        else:
+            range_key = "other"
+        
+        market = stock.get('market', 'プライム')
+        
+        if range_key not in ranges:
+            ranges[range_key] = {}
+        if market not in ranges[range_key]:
+            ranges[range_key][market] = []
+        
+        ranges[range_key][market].append(stock)
+    
+    # 各帯・各市場から均等に抽出
+    sampled = []
+    
+    for range_key, markets in sorted(ranges.items()):
+        # 市場数を取得
+        market_count = len(markets)
+        per_market = max(1, max_per_range // market_count)
+        
+        for market, stocks_in_market in sorted(markets.items()):
+            # 各市場から per_market 銘柄を抽出
+            sampled.extend(stocks_in_market[:per_market])
+    
+    logger.info(f"📊 間引きロジック: {len(stocks)}銘柄 → {len(sampled)}銘柄")
+    
+    # 各帯の内訳をログ出力
+    for range_key, markets in sorted(ranges.items()):
+        market_summary = ", ".join([f"{m}:{len(s)}" for m, s in markets.items()])
+        logger.info(f"   {range_key}番台: {market_summary}")
+    
+    return sampled
+
+
+class StockScreener:
+    """株式スクリーニングクラス"""
     
     def __init__(self):
         self.jq_client = AsyncJQuantsClient()
@@ -667,13 +723,16 @@ class ParallelStockScreener:
         po_time = int((datetime.now() - po_start).total_seconds() * 1000)
         logger.info(f"パーフェクトオーダー検出: {len(perfect_order)}銘柄 ({po_time}ms)")
         
-        # Supabase保存
+        # 間引き処理
+        perfect_order_sampled = sample_stocks_balanced(perfect_order, max_per_range=10)
+        
+        # Supabase保存（元の検出数を保持）
         screening_id = self.sb_client.save_screening_result(
             "perfect_order", datetime.now().strftime('%Y-%m-%d'),
-            len(perfect_order), po_time
+            len(perfect_order), po_time  # 元の検出数
         )
         if screening_id:
-            self.sb_client.save_detected_stocks(screening_id, perfect_order)
+            self.sb_client.save_detected_stocks(screening_id, perfect_order_sampled)
         
         # ボリンジャーバンド
         logger.info("=" * 60)
@@ -685,12 +744,15 @@ class ParallelStockScreener:
         bb_time = int((datetime.now() - bb_start).total_seconds() * 1000)
         logger.info(f"ボリンジャーバンド検出: {len(bollinger_band)}銘柄 ({bb_time}ms)")
         
+        # 間引き処理
+        bollinger_band_sampled = sample_stocks_balanced(bollinger_band, max_per_range=10)
+        
         screening_id = self.sb_client.save_screening_result(
             "bollinger_band", datetime.now().strftime('%Y-%m-%d'),
-            len(bollinger_band), bb_time
+            len(bollinger_band), bb_time  # 元の検出数
         )
         if screening_id:
-            self.sb_client.save_detected_stocks(screening_id, bollinger_band)
+            self.sb_client.save_detected_stocks(screening_id, bollinger_band_sampled)
         
         # 200日新高値押し目
         logger.info("=" * 60)
@@ -701,6 +763,9 @@ class ParallelStockScreener:
         )
         pb_time = int((datetime.now() - pb_start).total_seconds() * 1000)
         logger.info(f"200日新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
+        
+        # 間引き処理
+        week52_pullback_sampled = sample_stocks_balanced(week52_pullback, max_per_range=10)
         
         # 統計情報を表示
         if hasattr(self, 'pullback_stats'):
@@ -742,10 +807,10 @@ class ParallelStockScreener:
         
         screening_id = self.sb_client.save_screening_result(
             "200day_pullback", datetime.now().strftime('%Y-%m-%d'),
-            len(week52_pullback), pb_time
+            len(week52_pullback), pb_time  # 元の検出数
         )
         if screening_id:
-            self.sb_client.save_detected_stocks(screening_id, week52_pullback)
+            self.sb_client.save_detected_stocks(screening_id, week52_pullback_sampled)
         
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info("=" * 60)
