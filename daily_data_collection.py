@@ -905,7 +905,7 @@ async def main():
     logger.info("=" * 60)
     
     try:
-        screener = ParallelStockScreener()
+        screener = StockScreener()
         
         # 銘柄リスト取得
         logger.info("銘柄リスト取得中...")
