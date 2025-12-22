@@ -15,6 +15,7 @@ import aiohttp
 import pandas as pd
 from typing import List, Dict, Any, Optional
 import pytz
+import math
 
 # ============================================================
 # スクリーニングオプション設定
@@ -54,6 +55,28 @@ CONCURRENT_REQUESTS = 20  # 同時実行数
 HISTORY_DAYS = 90
 RETRY_COUNT = 3
 RETRY_DELAY = 1
+
+
+def safe_float(value, default=None):
+    """安全にfloatに変換（NaN, Infを回避）"""
+    if value is None or value == "" or value == "NaN":
+        return default
+    try:
+        result = float(value)
+        if math.isnan(result) or math.isinf(result):
+            return default
+        return result
+    except (ValueError, TypeError):
+        return default
+
+def safe_int(value, default=None):
+    """安全にintに変換"""
+    if value is None or value == "":
+        return default
+    try:
+        return int(float(value))  # float経由でintに変換
+    except (ValueError, TypeError):
+        return default
 
 
 class SupabaseClient:
@@ -115,22 +138,22 @@ class SupabaseClient:
                     "stock_code": str(stock.get("code", "")),
                     "company_name": str(stock.get("name", "")),
                     "market": str(stock.get("market", "")),
-                    "close_price": float(stock.get("price") or stock.get("close") or 0),
-                    "volume": int(stock.get("volume", 0)),
-                    "ema_10": float(stock.get("ema10") or stock.get("ema_10") or 0) if (stock.get("ema10") or stock.get("ema_10")) else None,
-                    "ema_20": float(stock.get("ema20") or stock.get("ema_20") or 0) if (stock.get("ema20") or stock.get("ema_20")) else None,
-                    "ema_50": float(stock.get("ema50") or stock.get("ema_50") or 0) if (stock.get("ema50") or stock.get("ema_50")) else None,
-                    "week52_high": float(stock.get("high_52week") or 0) if stock.get("high_52week") else None,
+                    "close_price": safe_float(stock.get("price") or stock.get("close"), 0),
+                    "volume": safe_int(stock.get("volume"), 0),
+                    "ema_10": safe_float(stock.get("ema10") or stock.get("ema_10")),
+                    "ema_20": safe_float(stock.get("ema20") or stock.get("ema_20")),
+                    "ema_50": safe_float(stock.get("ema50") or stock.get("ema_50")),
+                    "week52_high": safe_float(stock.get("high_52week")),
                     "touch_ema": str(stock.get("touched_emas") or stock.get("ema_touch") or "") if (stock.get("touched_emas") or stock.get("ema_touch")) else None,
-                    "pullback_percentage": float(stock.get("pullback_pct") or 0) if stock.get("pullback_pct") else None,
-                    "bollinger_upper": float(stock.get("upper_3sigma") or 0) if stock.get("upper_3sigma") else None,
-                    "bollinger_lower": float(stock.get("lower_3sigma") or 0) if stock.get("lower_3sigma") else None,
-                    "bollinger_middle": float(stock.get("sma20") or 0) if stock.get("sma20") else None,
+                    "pullback_percentage": safe_float(stock.get("pullback_pct")),
+                    "bollinger_upper": safe_float(stock.get("upper_3sigma")),
+                    "bollinger_lower": safe_float(stock.get("lower_3sigma")),
+                    "bollinger_middle": safe_float(stock.get("sma20")),
                     "touch_direction": str(stock.get("touch_direction", "upper")),
-                    "sma_200": float(stock.get("sma200") or 0) if stock.get("sma200") else None,
+                    "sma_200": safe_float(stock.get("sma200")),
                     "sma200_position": str(stock.get("sma200_position", "")) if stock.get("sma200_position") else None,
-                    "stochastic_k": float(stock.get("stochastic_k") or 0) if stock.get("stochastic_k") else None,
-                    "stochastic_d": float(stock.get("stochastic_d") or 0) if stock.get("stochastic_d") else None
+                    "stochastic_k": safe_float(stock.get("stochastic_k")),
+                    "stochastic_d": safe_float(stock.get("stochastic_d"))
                 }
                 data_list.append(data)
             
