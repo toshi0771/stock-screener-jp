@@ -337,7 +337,7 @@
     <div class="container">
         <header>
             <h1>株式スクリーニング</h1>
-            <p class="subtitle">スイングトレード上昇銘柄を3つの手法で一発検索</p>
+            <p class="subtitle">スイングトレード上昇銘柄を4つの手法で一発検索</p>
         </header>
         
         <!-- ボタングリッド -->
@@ -350,6 +350,9 @@
             </div>
             <div class="card-button" data-method="200day_pullback">
                 <div class="title">200日新高値<br>押し目</div>
+            </div>
+            <div class="card-button" data-method="squeeze">
+                <div class="title">スクイーズ<br>（価格収縮）</div>
             </div>
             <div class="card-button" data-method="history">
                 <div class="title">過去データ</div>
@@ -426,6 +429,18 @@
                     <span id="stochasticLabel">OFF</span>
                 </div>
             </div>
+            
+            <!-- スクイーズ専用オプション -->
+            <div class="option-group" id="squeezeOptions" style="display: none;">
+                <label class="option-label">継続期間フィルター</label>
+                <select class="option-select" id="durationFilter">
+                    <option value="all">全て</option>
+                    <option value="1week">1週間以内（1-7日）</option>
+                    <option value="1-2weeks">1週間～2週間（8-14日）</option>
+                    <option value="2weeks-1month">2週間～1か月（15-30日）</option>
+                    <option value="1month+">1か月以上（31日以上）</option>
+                </select>
+            </div>
         </div>
         
         <!-- スクリーニング実行ボタン -->
@@ -469,6 +484,7 @@
                 const bollingerOptions = document.getElementById('bollingerOptions');
                 const pullbackOptions = document.getElementById('pullbackOptions');
                 const pullbackOptions2 = document.getElementById('pullbackOptions2');
+                const squeezeOptions = document.getElementById('squeezeOptions');
                 
                 if (selectedMethod === 'history') {
                     periodSelect.classList.add('show');
@@ -496,12 +512,21 @@
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'block';
                         pullbackOptions2.style.display = 'block';
+                        squeezeOptions.style.display = 'none';
+                    } else if (selectedMethod === 'squeeze') {
+                        perfectOrderOptions.style.display = 'none';
+                        perfectOrderOptions2.style.display = 'none';
+                        bollingerOptions.style.display = 'none';
+                        pullbackOptions.style.display = 'none';
+                        pullbackOptions2.style.display = 'none';
+                        squeezeOptions.style.display = 'block';
                     } else {
                         perfectOrderOptions.style.display = 'none';
                         perfectOrderOptions2.style.display = 'none';
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
+                        squeezeOptions.style.display = 'none';
                     }
                 }
                 
@@ -608,6 +633,37 @@
                             
                             html += '</div></div>';
                             
+                            // スクイーズ（4列）
+                            html += '<div>';
+                            html += '<h4 style="color: #059669; margin-bottom: 10px;">スクイーズ（価格収縮）</h4>';
+                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 20px;">';
+                            
+                            // 1週間以内
+                            html += '<div>';
+                            html += '<h5 style="color: #06b6d4; margin: 0 0 10px 0;">1週間以内 (' + (row.squeeze_1week?.length || 0) + '銘柄)</h5>';
+                            html += renderCategoryStocks(row.squeeze_1week, 'squeeze_1week');
+                            html += '</div>';
+                            
+                            // 1週間～2週間
+                            html += '<div>';
+                            html += '<h5 style="color: #8b5cf6; margin: 0 0 10px 0;">1週間～2週間 (' + (row.squeeze_1_2weeks?.length || 0) + '銘柄)</h5>';
+                            html += renderCategoryStocks(row.squeeze_1_2weeks, 'squeeze_1_2weeks');
+                            html += '</div>';
+                            
+                            // 2週間～1か月
+                            html += '<div>';
+                            html += '<h5 style="color: #ec4899; margin: 0 0 10px 0;">2週間～1か月 (' + (row.squeeze_2weeks_1month?.length || 0) + '銘柄)</h5>';
+                            html += renderCategoryStocks(row.squeeze_2weeks_1month, 'squeeze_2weeks_1month');
+                            html += '</div>';
+                            
+                            // 1か月以上
+                            html += '<div>';
+                            html += '<h5 style="color: #f97316; margin: 0 0 10px 0;">1か月以上 (' + (row.squeeze_1month_plus?.length || 0) + '銘柄)</h5>';
+                            html += renderCategoryStocks(row.squeeze_1month_plus, 'squeeze_1month_plus');
+                            html += '</div>';
+                            
+                            html += '</div></div>';
+                            
                             html += '</div>';
                         });
                         
@@ -637,6 +693,11 @@
                         options.use_stochastic = document.getElementById('stochasticToggle').checked;
                     }
                     
+                    // スクイーズの場合、オプションを追加
+                    if (selectedMethod === 'squeeze') {
+                        options.duration_filter = document.getElementById('durationFilter').value;
+                    }
+                    
                     // スクリーニング実行
                     const response = await fetch('/api/screening', {
                         method: 'POST',
@@ -654,7 +715,8 @@
                     const methodNames = {
                         'perfect_order': 'パーフェクトオーダー',
                         'bollinger_band': 'ボリンジャーバンド±3σ',
-                        '200day_pullback': '200日新高値押し目'
+                        '200day_pullback': '200日新高値押し目',
+                        'squeeze': 'スクイーズ（価格収縮）'
                     };
                     
                     resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出`;
