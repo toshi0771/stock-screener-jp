@@ -302,7 +302,7 @@ class AsyncJQuantsClient:
 
 def sample_stocks_balanced(stocks, max_per_range=10):
     """
-    銘柄コード帯別・市場別にバランスよくサンプリング
+    銘柄コード帯別・市場別の銘柄数に応じた割合でランダムサンプリング
     
     Args:
         stocks: 検出銘柄のリスト
@@ -310,7 +310,15 @@ def sample_stocks_balanced(stocks, max_per_range=10):
     
     Returns:
         サンプリングされた銘柄のリスト
+    
+    ロジック:
+        1. 各銘柄コード帯（1000-1999, 2000-2999など）内で市場別に分類
+        2. 各市場の銘柄数を集計
+        3. 最大剰余法（Largest Remainder Method）で抽出数を決定
+        4. 各市場からランダムに抽出
     """
+    import random
+    
     if not stocks or len(stocks) <= 100:
         return stocks  # 100銘柄以下ならそのまま返す
     
@@ -334,17 +342,51 @@ def sample_stocks_balanced(stocks, max_per_range=10):
         
         ranges[range_key][market].append(stock)
     
-    # 各帯・各市場から均等に抽出
+    # 各帯から市場別の銘柄数に応じてランダム抽出
     sampled = []
     
     for range_key, markets in sorted(ranges.items()):
-        # 市場数を取得
-        market_count = len(markets)
-        per_market = max(1, max_per_range // market_count)
+        # 各市場の銘柄数を集計
+        market_counts = {market: len(stocks_list) for market, stocks_list in markets.items()}
+        total_in_range = sum(market_counts.values())
         
-        for market, stocks_in_market in sorted(markets.items()):
-            # 各市場から per_market 銘柄を抽出
-            sampled.extend(stocks_in_market[:per_market])
+        # この帯から抽出する銘柄数（最大max_per_range）
+        target_count = min(max_per_range, total_in_range)
+        
+        # 最大剰余法で各市場の抽出数を計算
+        market_samples = {}
+        quotas = {}  # 比例配分の商
+        remainders = {}  # 比例配分の余り
+        
+        # ステップ1: 比例配分の商と余りを計算
+        for market, count in market_counts.items():
+            quota = (count / total_in_range) * target_count
+            quotas[market] = int(quota)  # 整数部分
+            remainders[market] = quota - int(quota)  # 小数部分（余り）
+        
+        # ステップ2: 商の合計を計算
+        allocated = sum(quotas.values())
+        
+        # ステップ3: 残りの議席を余りが大きい順に配分
+        remaining_seats = target_count - allocated
+        if remaining_seats > 0:
+            # 余りが大きい順にソート
+            sorted_markets = sorted(remainders.items(), key=lambda x: x[1], reverse=True)
+            for i in range(remaining_seats):
+                market = sorted_markets[i][0]
+                quotas[market] += 1
+        
+        # 実際の銘柄数を超えないように調整
+        for market, sample_count in quotas.items():
+            market_samples[market] = min(sample_count, market_counts[market])
+        
+        # 各市場からランダムに抽出
+        for market, sample_count in market_samples.items():
+            if sample_count > 0:
+                stocks_in_market = markets[market]
+                # ランダムにサンプリング
+                sampled_stocks = random.sample(stocks_in_market, min(sample_count, len(stocks_in_market)))
+                sampled.extend(sampled_stocks)
     
     logger.info(f"📊 間引きロジック: {len(stocks)}銘柄 → {len(sampled)}銘柄")
     
