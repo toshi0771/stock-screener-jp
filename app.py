@@ -229,13 +229,9 @@ def api_screening():
                 additional_data = r.get('additional_data', {})
                 duration_days = additional_data.get('duration_days', 0)
                 
-                if duration_filter == '1week' and 1 <= duration_days <= 7:
+                if duration_filter == 'within_1month' and 1 <= duration_days <= 30:
                     filtered_results.append(r)
-                elif duration_filter == '1-2weeks' and 8 <= duration_days <= 14:
-                    filtered_results.append(r)
-                elif duration_filter == '2weeks-1month' and 15 <= duration_days <= 30:
-                    filtered_results.append(r)
-                elif duration_filter == '1month+' and duration_days >= 31:
+                elif duration_filter == 'over_1month' and duration_days >= 31:
                     filtered_results.append(r)
             
             results = filtered_results
@@ -518,10 +514,8 @@ def get_history():
                         .execute()
                     
                     # 継続期間で分類
-                    squeeze_1week = []
-                    squeeze_1_2weeks = []
-                    squeeze_2weeks_1month = []
-                    squeeze_1month_plus = []
+                    squeeze_within_1month = []
+                    squeeze_over_1month = []
                     
                     for s in squeeze_stocks.data:
                         additional_data = s.get('additional_data', {})
@@ -533,30 +527,20 @@ def get_history():
                             'duration_days': duration_days
                         }
                         
-                        if 1 <= duration_days <= 7:
-                            squeeze_1week.append(stock_info)
-                        elif 8 <= duration_days <= 14:
-                            squeeze_1_2weeks.append(stock_info)
-                        elif 15 <= duration_days <= 30:
-                            squeeze_2weeks_1month.append(stock_info)
+                        if 1 <= duration_days <= 30:
+                            squeeze_within_1month.append(stock_info)
                         elif duration_days >= 31:
-                            squeeze_1month_plus.append(stock_info)
+                            squeeze_over_1month.append(stock_info)
                     
-                    date_data['squeeze_1week'] = squeeze_1week
-                    date_data['squeeze_1_2weeks'] = squeeze_1_2weeks
-                    date_data['squeeze_2weeks_1month'] = squeeze_2weeks_1month
-                    date_data['squeeze_1month_plus'] = squeeze_1month_plus
+                    date_data['squeeze_within_1month'] = squeeze_within_1month
+                    date_data['squeeze_over_1month'] = squeeze_over_1month
                 except Exception as e:
                     print(f"   スクイーズ銘柄取得エラー: {e}", file=sys.stderr)
-                    date_data['squeeze_1week'] = []
-                    date_data['squeeze_1_2weeks'] = []
-                    date_data['squeeze_2weeks_1month'] = []
-                    date_data['squeeze_1month_plus'] = []
+                    date_data['squeeze_within_1month'] = []
+                    date_data['squeeze_over_1month'] = []
             else:
-                date_data['squeeze_1week'] = []
-                date_data['squeeze_1_2weeks'] = []
-                date_data['squeeze_2weeks_1month'] = []
-                date_data['squeeze_1month_plus'] = []
+                date_data['squeeze_within_1month'] = []
+                date_data['squeeze_over_1month'] = []
         
         # リストに変換してソート
         history_list = sorted(history_dict.values(), key=lambda x: x['date'], reverse=True)
