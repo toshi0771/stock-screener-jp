@@ -251,6 +251,64 @@ class AsyncJQuantsClient:
             logger.error(f"エラータイプ: {type(e).__name__}")
             return False
     
+    async def get_trading_calendar(self, session: aiohttp.ClientSession, from_date: str, to_date: str):
+        """取引カレンダーを取得"""
+        if not self.id_token:
+            await self.authenticate(session)
+        
+        try:
+            url = f"{self.base_url}/markets/trading_calendar"
+            headers = {"Authorization": f"Bearer {self.id_token}"}
+            params = {"from": from_date, "to": to_date}
+            
+            async with session.get(url, headers=headers, params=params) as response:
+                response.raise_for_status()
+                data = await response.json()
+                return data.get("trading_calendar", [])
+        except Exception as e:
+            logger.error(f"取引カレンダー取得失敗: {e}")
+            return None
+    
+    async def is_trading_day(self, session: aiohttp.ClientSession, date: str) -> bool:
+        """指定日が営業日かどうかを確認
+        
+        Args:
+            session: aiohttp.ClientSession
+            date: 日付文字列（YYYY-MM-DD形式）
+        
+        Returns:
+            bool: 営業日ならTrue、休場日ならFalse
+        """
+        try:
+            # 日付をYYYYMMDD形式に変換
+            date_obj = datetime.strptime(date, "%Y-%m-%d")
+            date_yyyymmdd = date_obj.strftime("%Y%m%d")
+            
+            # 取引カレンダーを取得（指定日のみ）
+            calendar = await self.get_trading_calendar(session, date_yyyymmdd, date_yyyymmdd)
+            
+            if not calendar:
+                logger.warning(f"取引カレンダーの取得に失敗しました: {date}")
+                return False
+            
+            # HolidayDivision が "0" なら営業日、"1" なら休場日
+            for day in calendar:
+                if day.get("Date") == date_yyyymmdd:
+                    holiday_division = day.get("HolidayDivision")
+                    if holiday_division == "0":
+                        logger.info(f"✅ {date} は営業日です")
+                        return True
+                    else:
+                        logger.info(f"🚫 {date} は休場日です（HolidayDivision: {holiday_division}）")
+                        return False
+            
+            logger.warning(f"取引カレンダーに {date} のデータがありません")
+            return False
+            
+        except Exception as e:
+            logger.error(f"営業日チェックエラー: {e}")
+            return False
+    
     async def get_listed_info(self, session: aiohttp.ClientSession):
         """上場銘柄一覧を取得"""
         if not self.id_token:
@@ -1141,12 +1199,29 @@ async def main():
     try:
         screener = StockScreener()
         
-        # 銘柄リスト取得
-        logger.info("銘柄リスト取得中...")
+        # 営業日チェック
+        today = datetime.now().strftime('%Y-%m-%d')
+        logger.info(f"📅 実行日: {today}")
+        logger.info("🔍 営業日チェック中...")
         
         connector = aiohttp.TCPConnector()
         async with aiohttp.ClientSession(connector=connector) as session:
             await screener.jq_client.authenticate(session)
+            
+            # 営業日かどうかを確認
+            is_trading = await screener.jq_client.is_trading_day(session, today)
+            
+            if not is_trading:
+                logger.info("=" * 60)
+                logger.info("🚫 本日は休場日のため、スクリーニングをスキップします")
+                logger.info("=" * 60)
+                return 0
+            
+            logger.info("✅ 本日は営業日です。スクリーニングを開始します")
+            logger.info("=" * 60)
+            
+            # 銘柄リスト取得
+            logger.info("銘柄リスト取得中...")
             all_stocks_data = await screener.jq_client.get_listed_info(session)
         
         if not all_stocks_data:
