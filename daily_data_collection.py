@@ -171,18 +171,29 @@ class SupabaseClient:
 
 
 class AsyncJQuantsClient:
-    """非同期jQuants APIクライアント"""
+    """非同期jQuants APIクライアント（V2 API対応）"""
     
     def __init__(self):
+        # V2 API: APIキーを使用
+        self.api_key = os.getenv('JQUANTS_API_KEY')
+        
+        # V1 API互換性（フォールバック）
         self.refresh_token = os.getenv('JQUANTS_REFRESH_TOKEN')
         self.id_token = None
-        self.base_url = "https://api.jquants.com/v1"
         
-        if not self.refresh_token:
-            raise ValueError("JQUANTS_REFRESH_TOKEN が設定されていません")
-        
-        # Refresh Token有効期限チェック
-        self._check_refresh_token_expiry()
+        # V2 APIを優先する
+        if self.api_key:
+            self.api_version = "v2"
+            self.base_url = "https://api.jquants.com/v2"
+            logger.info("✅ J-Quants API V2を使用します（APIキー認証）")
+        elif self.refresh_token:
+            self.api_version = "v1"
+            self.base_url = "https://api.jquants.com/v1"
+            logger.warning("⚠️ J-Quants API V1を使用します（Refresh Token認証）")
+            logger.warning("⚠️ V2 APIへの移行を推奨します。JQUANTS_API_KEYを設定してください。")
+            self._check_refresh_token_expiry()
+        else:
+            raise ValueError("JQUANTS_API_KEY または JQUANTS_REFRESH_TOKEN が設定されていません")
     
     def _check_refresh_token_expiry(self):
         """Refresh Token有効期限をチェック"""
@@ -210,12 +221,18 @@ class AsyncJQuantsClient:
             logger.error(f"❌ JQUANTS_TOKEN_CREATED_DATE の形式が不正です（正しい形式: YYYY-MM-DD）: {e}")
     
     async def authenticate(self, session: aiohttp.ClientSession):
-        """認証してIDトークンを取得（詳細ログ付き）"""
+        """認証処理（V2はAPIキー、V1はRefresh Token）"""
+        # V2 API: 認証不要（APIキーをヘッダーに追加するだけ）
+        if self.api_version == "v2":
+            logger.info("✅ J-Quants API V2: 認証不要（APIキー使用）")
+            return True
+        
+        # V1 API: Refresh TokenでID Tokenを取得
         try:
             url = f"{self.base_url}/token/auth_refresh"
             params = {"refreshtoken": self.refresh_token}
             
-            logger.info("🔐 jQuants API認証開始...")
+            logger.info("🔐 jQuants API V1認証開始...")
             logger.info(f"🔑 Refresh Token長: {len(self.refresh_token) if self.refresh_token else 0}文字")
             logger.info(f"🔑 Refresh Token先頭: {self.refresh_token[:50] if self.refresh_token else 'None'}...")
             
@@ -225,46 +242,88 @@ class AsyncJQuantsClient:
                 if status_code == 200:
                     data = await response.json()
                     self.id_token = data["idToken"]
-                    logger.info("✅ jQuants API認証成功（ID Token取得完了）")
+                    logger.info("✅ jQuants API V1認証成功（ID Token取得完了）")
                     return True
                 elif status_code == 400:
                     error_text = await response.text()
-                    logger.error(f"❌ jQuants API認証失敗 [400 Bad Request]: Refresh Tokenの形式が不正です")
+                    logger.error(f"❌ jQuants API V1認証失敗 [400 Bad Request]: Refresh Tokenの形式が不正です")
                     logger.error(f"詳細: {error_text}")
                     return False
                 elif status_code == 401:
                     error_text = await response.text()
-                    logger.error(f"❌ jQuants API認証失敗 [401 Unauthorized]: Refresh Tokenが無効または期限切れです")
+                    logger.error(f"❌ jQuants API V1認証失敗 [401 Unauthorized]: Refresh Tokenが無効または期限切れです")
                     logger.error(f"詳細: {error_text}")
-                    logger.error("🔧 対処方法: jQuants APIで新しいRefresh Tokenを取得し、環境変数 JQUANTS_REFRESH_TOKEN を更新してください")
+                    logger.error("🔧 対処方法: V2 APIへの移行を推奨します。JQUANTS_API_KEYを設定してください。")
                     return False
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ jQuants API認証失敗 [{status_code}]: {error_text}")
+                    logger.error(f"❌ jQuants API V1認証失敗 [{status_code}]: {error_text}")
                     return False
                     
         except aiohttp.ClientError as e:
-            logger.error(f"❌ jQuants API認証失敗（ネットワークエラー）: {e}")
+            logger.error(f"❌ jQuants API V1認証失敗（ネットワークエラー）: {e}")
             return False
         except Exception as e:
-            logger.error(f"❌ jQuants API認証失敗（予期しないエラー）: {e}")
+            logger.error(f"❌ jQuants API V1認証失敗（予期しないエラー）: {e}")
             logger.error(f"エラータイプ: {type(e).__name__}")
             return False
     
+    def _get_headers(self):
+        """バージョンに応じたヘッダーを返す"""
+        if self.api_version == "v2":
+            return {"x-api-key": self.api_key}
+        else:
+            return {"Authorization": f"Bearer {self.id_token}"}
+    
+    async def get_listed_info(self, session: aiohttp.ClientSession):
+        """上場銘柄一覧を取得（V1/V2対応）"""
+        if self.api_version == "v1" and not self.id_token:
+            await self.authenticate(session)
+        
+        try:
+            # V2 API: /equities/master
+            if self.api_version == "v2":
+                url = f"{self.base_url}/equities/master"
+            # V1 API: /listed/info
+            else:
+                url = f"{self.base_url}/listed/info"
+            
+            headers = self._get_headers()
+            
+            async with session.get(url, headers=headers) as response:
+                response.raise_for_status()
+                data = await response.json()
+                
+                # V2 API: dataキーを使用
+                if self.api_version == "v2":
+                    return data.get("data", [])
+                # V1 API: infoキーを使用
+                else:
+                    return data.get("info", [])
+        except Exception as e:
+            logger.error(f"銘柄一覧取得失敗: {e}")
+            return None
+    
     async def get_trading_calendar(self, session: aiohttp.ClientSession, from_date: str, to_date: str):
-        """取引カレンダーを取得"""
-        if not self.id_token:
+        """取引カレンダーを取得（V1/V2対応）"""
+        if self.api_version == "v1" and not self.id_token:
             await self.authenticate(session)
         
         try:
             url = f"{self.base_url}/markets/trading_calendar"
-            headers = {"Authorization": f"Bearer {self.id_token}"}
+            headers = self._get_headers()
             params = {"from": from_date, "to": to_date}
             
             async with session.get(url, headers=headers, params=params) as response:
                 response.raise_for_status()
                 data = await response.json()
-                return data.get("trading_calendar", [])
+                
+                # V2 API: dataキーを使用
+                if self.api_version == "v2":
+                    return data.get("data", [])
+                # V1 API: trading_calendarキーを使用
+                else:
+                    return data.get("trading_calendar", [])
         except Exception as e:
             logger.error(f"取引カレンダー取得失敗: {e}")
             return None
@@ -293,8 +352,8 @@ class AsyncJQuantsClient:
             
             # HolidayDivision が "0" なら営業日、"1" なら休場日
             for day in calendar:
-                if day.get("Date") == date_yyyymmdd:
-                    holiday_division = day.get("HolidayDivision")
+                if day.get("Date") == date_yyyymmdd or day.get("D") == date_yyyymmdd:
+                    holiday_division = day.get("HolidayDivision") or day.get("HD")
                     if holiday_division == "0":
                         logger.info(f"✅ {date} は営業日です")
                         return True
@@ -309,32 +368,21 @@ class AsyncJQuantsClient:
             logger.error(f"営業日チェックエラー: {e}")
             return False
     
-    async def get_listed_info(self, session: aiohttp.ClientSession):
-        """上場銘柄一覧を取得"""
-        if not self.id_token:
-            await self.authenticate(session)
-        
-        try:
-            url = f"{self.base_url}/listed/info"
-            headers = {"Authorization": f"Bearer {self.id_token}"}
-            
-            async with session.get(url, headers=headers) as response:
-                response.raise_for_status()
-                data = await response.json()
-                return data["info"]
-        except Exception as e:
-            logger.error(f"銘柄一覧取得失敗: {e}")
-            return None
-    
     async def get_prices_daily_quotes(self, session: aiohttp.ClientSession, code: str, 
                                      from_date: str, to_date: str, retry: int = 0):
-        """日次株価データを取得（リトライ機能付き）"""
-        if not self.id_token:
+        """日次株価データを取得（V1/V2対応、リトライ機能付き）"""
+        if self.api_version == "v1" and not self.id_token:
             await self.authenticate(session)
         
         try:
-            url = f"{self.base_url}/prices/daily_quotes"
-            headers = {"Authorization": f"Bearer {self.id_token}"}
+            # V2 API: /equities/bars/daily
+            if self.api_version == "v2":
+                url = f"{self.base_url}/equities/bars/daily"
+            # V1 API: /prices/daily_quotes
+            else:
+                url = f"{self.base_url}/prices/daily_quotes"
+            
+            headers = self._get_headers()
             params = {
                 "code": code,
                 "from": from_date,
@@ -345,10 +393,28 @@ class AsyncJQuantsClient:
                 response.raise_for_status()
                 data = await response.json()
                 
-                if "daily_quotes" in data and data["daily_quotes"]:
-                    df = pd.DataFrame(data["daily_quotes"])
-                    return df
-                return None
+                # V2 API: dataキーを使用
+                if self.api_version == "v2":
+                    if "data" in data and data["data"]:
+                        df = pd.DataFrame(data["data"])
+                        # V2 APIのカラム名をV1形式に変換
+                        column_mapping = {
+                            "D": "Date",
+                            "O": "Open",
+                            "H": "High",
+                            "L": "Low",
+                            "C": "Close",
+                            "V": "Volume"
+                        }
+                        df = df.rename(columns=column_mapping)
+                        return df
+                    return None
+                # V1 API: daily_quotesキーを使用
+                else:
+                    if "daily_quotes" in data and data["daily_quotes"]:
+                        df = pd.DataFrame(data["daily_quotes"])
+                        return df
+                    return None
                 
         except Exception as e:
             if retry < RETRY_COUNT:
