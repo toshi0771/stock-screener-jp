@@ -395,8 +395,8 @@
                 <label class="option-label">株価と50EMAとの乖離率</label>
                 <select class="option-select" id="ema50DivergenceSelect">
                     <option value="all">全て</option>
-                    <option value="5">5%以内</option>
-                    <option value="10">10%以内</option>
+                    <option value="10">10%未満</option>
+                    <option value="20">20%未満</option>
                 </select>
             </div>
             
@@ -437,8 +437,10 @@
                 <label class="option-label">継続期間フィルター</label>
                 <select class="option-select" id="durationFilter">
                     <option value="all">全て</option>
-                    <option value="within_1month">1か月以内（1-30日）</option>
-                    <option value="over_1month">1か月以上（31日以上）</option>
+                    <option value="1week">1週間以内（1-7日）</option>
+                    <option value="1-2weeks">1週間～2週間（8-14日）</option>
+                    <option value="2weeks-1month">2週間～1か月（15-30日）</option>
+                    <option value="1month+">1か月以上（31日以上）</option>
                 </select>
             </div>
         </div>
@@ -646,8 +648,8 @@
                             
                             // 1か月以上
                             html += '<div>';
-                            html += '<h5 style="color: #f97316; margin: 0 0 10px 0;">1か月以上 (' + (row.squeeze_over_1month?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.squeeze_over_1month, 'squeeze_over_1month');
+                            html += '<h5 style="color: #f97316; margin: 0 0 10px 0;">1か月以上 (' + (row.squeeze_1month_plus?.length || 0) + '銘柄)</h5>';
+                            html += renderCategoryStocks(row.squeeze_1month_plus, 'squeeze_1month_plus');
                             html += '</div>';
                             
                             html += '</div></div>';

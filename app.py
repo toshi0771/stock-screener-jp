@@ -229,9 +229,13 @@ def api_screening():
                 additional_data = r.get('additional_data', {})
                 duration_days = additional_data.get('duration_days', 0)
                 
-                if duration_filter == 'within_1month' and 1 <= duration_days <= 30:
+                if duration_filter == '1week' and 1 <= duration_days <= 7:
                     filtered_results.append(r)
-                elif duration_filter == 'over_1month' and duration_days >= 31:
+                elif duration_filter == '1-2weeks' and 8 <= duration_days <= 14:
+                    filtered_results.append(r)
+                elif duration_filter == '2weeks-1month' and 15 <= duration_days <= 30:
+                    filtered_results.append(r)
+                elif duration_filter == '1month+' and duration_days >= 31:
                     filtered_results.append(r)
             
             results = filtered_results
@@ -513,9 +517,9 @@ def get_history():
                         .eq('screening_result_id', date_data['squeeze_id'])\
                         .execute()
                     
-                    # 継続期間で分類
+                    # 継続期間で分類（1か月以内 / 1か月以上）
                     squeeze_within_1month = []
-                    squeeze_over_1month = []
+                    squeeze_1month_plus = []
                     
                     for s in squeeze_stocks.data:
                         additional_data = s.get('additional_data', {})
@@ -530,17 +534,17 @@ def get_history():
                         if 1 <= duration_days <= 30:
                             squeeze_within_1month.append(stock_info)
                         elif duration_days >= 31:
-                            squeeze_over_1month.append(stock_info)
+                            squeeze_1month_plus.append(stock_info)
                     
                     date_data['squeeze_within_1month'] = squeeze_within_1month
-                    date_data['squeeze_over_1month'] = squeeze_over_1month
+                    date_data['squeeze_1month_plus'] = squeeze_1month_plus
                 except Exception as e:
                     print(f"   スクイーズ銘柄取得エラー: {e}", file=sys.stderr)
                     date_data['squeeze_within_1month'] = []
-                    date_data['squeeze_over_1month'] = []
+                    date_data['squeeze_1month_plus'] = []
             else:
                 date_data['squeeze_within_1month'] = []
-                date_data['squeeze_over_1month'] = []
+                date_data['squeeze_1month_plus'] = []
         
         # リストに変換してソート
         history_list = sorted(history_dict.values(), key=lambda x: x['date'], reverse=True)
