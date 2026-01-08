@@ -310,7 +310,9 @@ class AsyncJQuantsClient:
             await self.authenticate(session)
         
         try:
-            url = f"{self.base_url}/markets/trading_calendar"
+            # V2 API: /markets/calendar, V1 API: /markets/trading_calendar
+            endpoint = "/markets/calendar" if self.api_version == "v2" else "/markets/trading_calendar"
+            url = f"{self.base_url}{endpoint}"
             headers = self._get_headers()
             params = {"from": from_date, "to": to_date}
             
@@ -350,16 +352,34 @@ class AsyncJQuantsClient:
                 logger.warning(f"取引カレンダーの取得に失敗しました: {date}")
                 return False
             
-            # HolidayDivision が "0" なら営業日、"1" なら休場日
+            # V2 API: HolDiv が "1" なら営業日、"0" なら休場日
+            # V1 API: HolidayDivision が "0" なら営業日、"1" なら休場日
             for day in calendar:
-                if day.get("Date") == date_yyyymmdd or day.get("D") == date_yyyymmdd:
+                # 日付フィールドの取得（V2: Date, V1: Date or D）
+                day_date = day.get("Date", "").replace("-", "")  # YYYY-MM-DD -> YYYYMMDD
+                if not day_date:
+                    day_date = day.get("D", "")
+                
+                if day_date == date_yyyymmdd:
+                    # V2 API: HolDiv
+                    hol_div = day.get("HolDiv")
+                    if hol_div:
+                        if hol_div == "1":
+                            logger.info(f"✅ {date} は営業日です（HolDiv: {hol_div}）")
+                            return True
+                        else:
+                            logger.info(f"🚫 {date} は休場日です（HolDiv: {hol_div}）")
+                            return False
+                    
+                    # V1 API: HolidayDivision or HD
                     holiday_division = day.get("HolidayDivision") or day.get("HD")
-                    if holiday_division == "0":
-                        logger.info(f"✅ {date} は営業日です")
-                        return True
-                    else:
-                        logger.info(f"🚫 {date} は休場日です（HolidayDivision: {holiday_division}）")
-                        return False
+                    if holiday_division:
+                        if holiday_division == "0":
+                            logger.info(f"✅ {date} は営業日です（HolidayDivision: {holiday_division}）")
+                            return True
+                        else:
+                            logger.info(f"🚫 {date} は休場日です（HolidayDivision: {holiday_division}）")
+                            return False
             
             logger.warning(f"取引カレンダーに {date} のデータがありません")
             return False
@@ -1265,8 +1285,17 @@ async def main():
     try:
         screener = StockScreener()
         
-        # 営業日チェック
-        today = datetime.now().strftime('%Y-%m-%d')
+        # コマンドライン引数から日付を取得（指定がない場合は今日）
+        import sys
+        if len(sys.argv) > 1:
+            target_date = sys.argv[1]
+            # YYYYMMDD形式をYYYY-MM-DD形式に変換
+            if len(target_date) == 8 and target_date.isdigit():
+                target_date = f"{target_date[:4]}-{target_date[4:6]}-{target_date[6:8]}"
+            today = target_date
+        else:
+            today = datetime.now().strftime('%Y-%m-%d')
+        
         logger.info(f"📅 実行日: {today}")
         logger.info("🔍 営業日チェック中...")
         
