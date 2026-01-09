@@ -30,8 +30,8 @@ PULLBACK_STOCHASTIC_FILTER = False  # True: ストキャス売られすぎのみ
 
 # ============================================================
 
-# 絶対パスで設定
-BASE_DIR = Path("/home/ubuntu/stock_screener_enhanced")
+# スクリプトのディレクトリを基準とした相対パス
+BASE_DIR = Path(__file__).parent
 DATA_DIR = BASE_DIR / "data"
 LOG_DIR = BASE_DIR / "logs"
 
