@@ -310,8 +310,8 @@ class AsyncJQuantsClient:
             await self.authenticate(session)
         
         try:
-            # V2 API: /markets/calendar, V1 API: /markets/trading_calendar
-            endpoint = "/markets/calendar" if self.api_version == "v2" else "/markets/trading_calendar"
+            # V2 API: /markets/trading-calendar (V1と同じ)
+            endpoint = "/markets/trading-calendar"
             url = f"{self.base_url}{endpoint}"
             headers = self._get_headers()
             params = {"from": from_date, "to": to_date}
