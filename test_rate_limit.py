@@ -58,7 +58,7 @@ async def test_rate_limit():
         logger.info(f"テスト対象: {len(test_stocks)}銘柄")
         
         # スクリーナーの初期化
-        screener = StockScreener(jq_client)
+        screener = StockScreener()
         
         # パーフェクトオーダーのスクリーニングをテスト
         logger.info("=" * 60)

@@ -9,7 +9,7 @@ on:
 jobs:
   collect-data:
     runs-on: ubuntu-latest
-    timeout-minutes: 360  # 6時間（レート制限対応のため長めに設定）
+    timeout-minutes: 720  # 12時間（Lightプランのレート制限対応）
     
     steps:
       - name: Checkout repository
