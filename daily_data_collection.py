@@ -275,8 +275,13 @@ class AsyncJQuantsClient:
         else:
             return {"Authorization": f"Bearer {self.id_token}"}
     
-    async def get_listed_info(self, session: aiohttp.ClientSession):
-        """上場銘柄一覧を取得（V1/V2対応）"""
+    async def get_listed_info(self, session: aiohttp.ClientSession, date: str = None):
+        """上場銘柄一覧を取得（V1/V2対応）
+        
+        Args:
+            session: aiohttp セッション
+            date: 基準日（YYYYMMDD形式、V2のみ有効）
+        """
         if self.api_version == "v1" and not self.id_token:
             await self.authenticate(session)
         
@@ -290,13 +295,22 @@ class AsyncJQuantsClient:
             
             headers = self._get_headers()
             
-            async with session.get(url, headers=headers) as response:
+            # V2 APIでdateパラメータを追加
+            params = {}
+            if date and self.api_version == "v2":
+                params["date"] = date
+            
+            async with session.get(url, headers=headers, params=params) as response:
                 response.raise_for_status()
                 data = await response.json()
                 
                 # V2 API: dataキーを使用
                 if self.api_version == "v2":
-                    return data.get("data", [])
+                    result = data.get("data", [])
+                    logger.info(f"🔍 銘柄一覧APIレスポンス: {len(result)}銘柄 (date={params.get('date', 'None')})")
+                    if len(result) == 0:
+                        logger.warning(f"⚠️ 銘柄データが0件です。レスポンス: {data}")
+                    return result
                 # V1 API: infoキーを使用
                 else:
                     return data.get("info", [])
@@ -310,8 +324,9 @@ class AsyncJQuantsClient:
             await self.authenticate(session)
         
         try:
-            # V2 API: /markets/trading-calendar (V1と同じ)
-            endpoint = "/markets/trading-calendar"
+            # V2 API: /markets/calendar (V1から名称変更)
+            # V1: /markets/trading_calendar, V2: /markets/calendar
+            endpoint = "/markets/calendar" if self.api_version == "v2" else "/markets/trading_calendar"
             url = f"{self.base_url}{endpoint}"
             headers = self._get_headers()
             params = {"from": from_date, "to": to_date}
@@ -589,7 +604,8 @@ class StockScreener:
         """単一銘柄のパーフェクトオーダースクリーニング（200SMAオプション付き）"""
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
-        market = stock.get("MarketCode", "")
+        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
+        market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
             # 株価データ取得（200SMA用に追加データ取得）
@@ -655,7 +671,8 @@ class StockScreener:
         """単一銘柄のボリンジャーバンドスクリーニング"""
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
-        market = stock.get("MarketCode", "")
+        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
+        market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
             end_date = datetime.now()
@@ -720,7 +737,8 @@ class StockScreener:
         
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
-        market = stock.get("MarketCode", "")
+        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
+        market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         # デバッグモード
         debug_mode = os.getenv('DEBUG_MODE', 'false').lower() == 'true'
@@ -887,7 +905,8 @@ class StockScreener:
         """単一銘柄のスクイーズ（価格収縮）スクリーニング"""
         code = stock["Code"]
         name = stock.get("CompanyName", f"銘柄{code}")
-        market = stock.get("MarketCode", "")
+        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
+        market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
             end_date = datetime.now()
@@ -1317,19 +1336,24 @@ async def main():
             
             # 銘柄リスト取得
             logger.info("銘柄リスト取得中...")
-            all_stocks_data = await screener.jq_client.get_listed_info(session)
+            # V2 APIでは対象日の銘柄情報を取得
+            # todayは既にYYYY-MM-DD形式の文字列
+            target_date_str = today.replace("-", "")  # YYYYMMDD形式に変換
+            all_stocks_data = await screener.jq_client.get_listed_info(session, date=target_date_str)
         
         if not all_stocks_data:
             logger.error("銘柄リスト取得失敗")
             return 1
         
         # 市場コードでフィルタ
+        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
+        market_field = "Mkt" if screener.jq_client.api_version == "v2" else "MarketCode"
         market_codes = {"0111": "プライム", "0112": "スタンダード", "0113": "グロース"}
-        all_stocks = [s for s in all_stocks_data if s.get("MarketCode") in market_codes]
+        all_stocks = [s for s in all_stocks_data if s.get(market_field) in market_codes]
         
         # 市場別統計
         for code, name in market_codes.items():
-            count = len([s for s in all_stocks if s.get("MarketCode") == code])
+            count = len([s for s in all_stocks if s.get(market_field) == code])
             logger.info(f"{name}市場: {count}銘柄")
         
         logger.info(f"合計: {len(all_stocks)}銘柄")
@@ -1344,7 +1368,7 @@ async def main():
             stock_6954_all = next((s for s in all_stocks_data if s.get("Code") == "6954"), None)
             if stock_6954_all:
                 logger.info(f"⚡ 6954は全銘柄リストに存在: {stock_6954_all}")
-                logger.info(f"⚡ MarketCode: {stock_6954_all.get('MarketCode')}")
+                logger.info(f"⚡ {market_field}: {stock_6954_all.get(market_field)}")
             else:
                 logger.error(f"❌ 6954は全銘柄リストにも存在しません！")
         
