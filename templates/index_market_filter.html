@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>株式スクリーニング - 市場選択機能付き</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+            min-height: 100vh;
+            padding: 20px;
+            color: #fff;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        header {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        h1 {
+            color: #1a237e;
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        .subtitle {
+            color: #666;
+            font-size: 1.1em;
+        }
+
+        .screening-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-bottom: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+        }
+
+        .screening-title {
+            color: #1a237e;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #1a237e;
+        }
+
+        .options-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-bottom: 25px;
+        }
+
+        .option-group {
+            background: #f8f9fa;
+            padding: 20px;
+            border-radius: 10px;
+            border-left: 4px solid #1a237e;
+        }
+
+        .option-label {
+            color: #333;
+            font-weight: 600;
+            margin-bottom: 12px;
+            font-size: 1.1em;
+        }
+
+        .select-wrapper {
+            position: relative;
+        }
+
+        .select-wrapper select {
+            width: 100%;
+            padding: 12px 15px;
+            font-size: 1em;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+            transition: all 0.3s;
+            appearance: none;
+            -webkit-appearance: none;
+            -moz-appearance: none;
+        }
+
+        .select-wrapper::after {
+            content: '▼';
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            pointer-events: none;
+            color: #1a237e;
+            font-size: 0.8em;
+        }
+
+        .select-wrapper select:hover {
+            border-color: #1a237e;
+        }
+
+        .select-wrapper select:focus {
+            outline: none;
+            border-color: #1a237e;
+            box-shadow: 0 0 0 3px rgba(26, 35, 126, 0.1);
+        }
+
+        .radio-group {
+            display: flex;
+            gap: 15px;
+            flex-wrap: wrap;
+        }
+
+        .radio-option {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .radio-option input[type="radio"] {
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .radio-option label {
+            color: #555;
+            cursor: pointer;
+            font-size: 1em;
+        }
+
+        .checkbox-option {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .checkbox-option input[type="checkbox"] {
+            width: 24px;
+            height: 24px;
+            cursor: pointer;
+        }
+
+        .checkbox-option label {
+            color: #555;
+            cursor: pointer;
+            font-size: 1.1em;
+        }
+
+        .execute-btn {
+            background: linear-gradient(135deg, #1a237e 0%, #0d47a1 100%);
+            color: white;
+            border: none;
+            padding: 15px 40px;
+            font-size: 1.2em;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+            width: 100%;
+            font-weight: 600;
+        }
+
+        .execute-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+        }
+
+        .execute-btn:active {
+            transform: translateY(0);
+        }
+
+        .execute-btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            background: rgba(255, 255, 255, 0.95);
+            border-radius: 15px;
+            padding: 30px;
+            margin-top: 30px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+            display: none;
+        }
+
+        .results-section.show {
+            display: block;
+        }
+
+        .results-title {
+            color: #1a237e;
+            font-size: 1.8em;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 3px solid #1a237e;
+        }
+
+        .results-summary {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+        }
+
+        .summary-card {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 20px;
+            border-radius: 10px;
+            text-align: center;
+        }
+
+        .summary-number {
+            font-size: 2.5em;
+            font-weight: bold;
+            margin-bottom: 5px;
+        }
+
+        .summary-label {
+            font-size: 1em;
+            opacity: 0.9;
+        }
+
+        .stocks-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+            overflow-x: auto;
+            display: block;
+        }
+
+        .stocks-table thead,
+        .stocks-table tbody {
+            display: table;
+            width: 100%;
+            table-layout: fixed;
+        }
+
+        .stocks-table th {
+            background: #1a237e;
+            color: white;
+            padding: 15px;
+            text-align: left;
+            font-weight: 600;
+        }
+
+        .stocks-table td {
+            padding: 12px 15px;
+            border-bottom: 1px solid #ddd;
+            color: #333;
+        }
+
+        .stocks-table tr:hover {
+            background: #f5f5f5;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #1a237e;
+            font-size: 1.2em;
+        }
+
+        .spinner {
+            border: 4px solid #f3f3f3;
+            border-top: 4px solid #1a237e;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+
+        .no-results {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+            font-size: 1.2em;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 12px;
+            border-radius: 12px;
+            font-size: 0.85em;
+            font-weight: 600;
+            margin-right: 5px;
+        }
+
+        .badge-primary {
+            background: #e3f2fd;
+            color: #1976d2;
+        }
+
+        .badge-success {
+            background: #e8f5e9;
+            color: #388e3c;
+        }
+
+        .badge-warning {
+            background: #fff3e0;
+            color: #f57c00;
+        }
+
+        .badge-info {
+            background: #e0f2f1;
+            color: #00796b;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>📈 株式スクリーニング</h1>
+            <p class="subtitle">東証全銘柄対応 - 市場選択機能付き</p>
+        </header>
+
+        <!-- パーフェクトオーダー -->
+        <div class="screening-section">
+            <h2 class="screening-title">🎯 パーフェクトオーダー</h2>
+            <div class="options-grid">
+                <div class="option-group">
+                    <div class="option-label">市場選択</div>
+                    <div class="select-wrapper">
+                        <select id="perfect_market">
+                            <option value="all">全て</option>
+                            <option value="プライム">プライム</option>
+                            <option value="スタンダード">スタンダード</option>
+                            <option value="グロース">グロース</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="option-label">200SMA フィルター</div>
+                    <div class="radio-group">
+                        <div class="radio-option">
+                            <input type="radio" id="sma200_all" name="sma200_filter" value="all" checked>
+                            <label for="sma200_all">全て</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="sma200_above" name="sma200_filter" value="above">
+                            <label for="sma200_above">200SMAより上</label>
+                        </div>
+                        <div class="radio-option">
+                            <input type="radio" id="sma200_below" name="sma200_filter" value="below">
+                            <label for="sma200_below">200SMAより下</label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <button class="execute-btn" onclick="executePerfectOrder()">
+                パーフェクトオーダー検出を実行
+            </button>
+        </div>
+
+        <!-- ボリンジャーバンド -->
+        <div class="screening-section">
+            <h2 class="screening-title">📊 ボリンジャーバンド±3σ</h2>
+            <div class="options-grid">
+                <div class="option-group">
+                    <div class="option-label">市場選択</div>
+                    <div class="select-wrapper">
+                        <select id="bollinger_market">
+                            <option value="all">全て</option>
+                            <option value="プライム">プライム</option>
+                            <option value="スタンダード">スタンダード</option>
+                            <option value="グロース">グロース</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button class="execute-btn" onclick="executeBollingerBand()">
+                ボリンジャーバンド検出を実行
+            </button>
+        </div>
+
+        <!-- 200日新高値押し目 -->
+        <div class="screening-section">
+            <h2 class="screening-title">🚀 200日新高値押し目</h2>
+            <div class="options-grid">
+                <div class="option-group">
+                    <div class="option-label">市場選択</div>
+                    <div class="select-wrapper">
+                        <select id="pullback_market">
+                            <option value="all">全て</option>
+                            <option value="プライム">プライム</option>
+                            <option value="スタンダード">スタンダード</option>
+                            <option value="グロース">グロース</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="option-label">移動平均線タッチ</div>
+                    <div class="select-wrapper">
+                        <select id="ema_touch_filter">
+                            <option value="all">全て</option>
+                            <option value="10EMA">10EMA</option>
+                            <option value="20EMA">20EMA</option>
+                            <option value="50EMA">50EMA</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="checkbox-option">
+                        <input type="checkbox" id="stochastic_filter" name="stochastic_filter">
+                        <label for="stochastic_filter">ストキャス売られすぎのみ</label>
+                    </div>
+                </div>
+            </div>
+            <button class="execute-btn" onclick="execute52WeekPullback()">
+                200日新高値押し目検出を実行
+            </button>
+        </div>
+
+        <!-- 過去データカード -->
+        <div class="screening-section">
+            <h2 class="screening-title">📅 過去データ表示</h2>
+            <div class="options-grid">
+                <div class="option-group">
+                    <div class="option-label">スクリーニング手法</div>
+                    <div class="select-wrapper">
+                        <select id="history_method">
+                            <option value="perfect_order">パーフェクトオーダー</option>
+                            <option value="bollinger_band">ボリンジャーバンド</option>
+                            <option value="200day_pullback">200日新高値押し目</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="option-group">
+                    <div class="option-label">表示期間</div>
+                    <div class="select-wrapper">
+                        <select id="history_period">
+                            <option value="10">10日前</option>
+                            <option value="30">30日前</option>
+                            <option value="60">60日前</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <button class="execute-btn" onclick="showHistoricalData()">
+                過去データを表示
+            </button>
+        </div>
+
+        <!-- 検出結果 -->
+        <div class="results-section" id="resultsSection">
+            <h2 class="results-title">検出結果</h2>
+            <div id="resultsContent"></div>
+        </div>
+    </div>
+
+    <script>
+        async function executePerfectOrder() {
+            const market = document.getElementById('perfect_market').value;
+            const sma200Filter = document.querySelector('input[name="sma200_filter"]:checked').value;
+            await executeScreening('perfect_order', { 
+                market: market,
+                sma200_filter: sma200Filter 
+            });
+        }
+
+        async function executeBollingerBand() {
+            const market = document.getElementById('bollinger_market').value;
+            await executeScreening('bollinger_band', { 
+                market: market 
+            });
+        }
+
+        async function execute52WeekPullback() {
+            const market = document.getElementById('pullback_market').value;
+            const emaTouchFilter = document.getElementById('ema_touch_filter').value;
+            const stochasticFilter = document.getElementById('stochastic_filter').checked;
+            await executeScreening('200day_pullback', { 
+                market: market,
+                ema_touch: emaTouchFilter,
+                stochastic_filter: stochasticFilter 
+            });
+        }
+
+        async function executeScreening(method, options) {
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            // 結果セクションを表示
+            resultsSection.classList.add('show');
+            
+            // ローディング表示
+            resultsContent.innerHTML = `
+                <div class="loading">
+                    <div class="spinner"></div>
+                    <p>スクリーニング実行中...</p>
+                </div>
+            `;
+            
+            // スクロール
+            resultsSection.scrollIntoView({ behavior: 'smooth' });
+            
+            try {
+                const response = await fetch('/api/screening', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        method: method,
+                        options: options
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayResults(data.results, method, options);
+                } else {
+                    resultsContent.innerHTML = `
+                        <div class="no-results">
+                            <p>❌ エラーが発生しました</p>
+                            <p>${data.error || '不明なエラー'}</p>
+                        </div>
+                    `;
+                }
+            } catch (error) {
+                resultsContent.innerHTML = `
+                    <div class="no-results">
+                        <p>❌ 通信エラーが発生しました</p>
+                        <p>${error.message}</p>
+                    </div>
+                `;
+            }
+        }
+
+        function displayResults(results, method, options) {
+            const resultsContent = document.getElementById('resultsContent');
+            
+            if (!results || results.length === 0) {
+                resultsContent.innerHTML = `
+                    <div class="no-results">
+                        <p>該当する銘柄が見つかりませんでした</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            const methodNames = {
+                'perfect_order': 'パーフェクトオーダー',
+                'bollinger_band': 'ボリンジャーバンド±3σ',
+                '200day_pullback': '200日新高値押し目'
+            };
+
+            const marketLabel = options.market === 'all' ? '全市場' : options.market;
+            
+            let html = `
+                <div class="results-summary">
+                    <div class="summary-card">
+                        <div class="summary-number">${results.length}</div>
+                        <div class="summary-label">検出銘柄数</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">${methodNames[method]}</div>
+                        <div class="summary-label">スクリーニング手法</div>
+                    </div>
+                    <div class="summary-card">
+                        <div class="summary-number">${marketLabel}</div>
+                        <div class="summary-label">対象市場</div>
+                    </div>
+                </div>
+                
+                <table class="stocks-table">
+                    <thead>
+                        <tr>
+                            <th>銘柄コード</th>
+                            <th>銘柄名</th>
+                            <th>市場</th>
+                            <th>株価</th>
+                            <th>出来高</th>
+                            <th>詳細</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            results.forEach(stock => {
+                let detailBadges = '';
+                
+                if (method === 'perfect_order') {
+                    detailBadges = `
+                        <span class="badge badge-success">EMA10: ${stock.ema10?.toFixed(2) || '-'}</span>
+                        <span class="badge badge-warning">EMA20: ${stock.ema20?.toFixed(2) || '-'}</span>
+                        <span class="badge badge-info">EMA50: ${stock.ema50?.toFixed(2) || '-'}</span>
+                    `;
+                } else if (method === 'bollinger_band') {
+                    detailBadges = `
+                        <span class="badge ${stock.touch_direction === 'upper' ? 'badge-warning' : 'badge-info'}">
+                            ${stock.touch_direction === 'upper' ? '上限タッチ' : '下限タッチ'}
+                        </span>
+                    `;
+                } else if (method === '200day_pullback') {
+                    detailBadges = `
+                        <span class="badge badge-success">${stock.ema_touch || '-'}</span>
+                        <span class="badge badge-info">ストキャス: ${stock.stochastic_k?.toFixed(1) || '-'}</span>
+                    `;
+                }
+                
+                html += `
+                    <tr>
+                        <td><strong>${stock.code}</strong></td>
+                        <td>${stock.name}</td>
+                        <td><span class="badge badge-primary">${stock.market}</span></td>
+                        <td><strong>¥${stock.price.toLocaleString()}</strong></td>
+                        <td>${stock.volume.toLocaleString()}</td>
+                        <td>${detailBadges}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            resultsContent.innerHTML = html;
+        }
+
+        async function showHistoricalData() {
+            const method = document.getElementById('history_method').value;
+            const period = parseInt(document.getElementById('history_period').value);
+            const resultsSection = document.getElementById('resultsSection');
+            const resultsContent = document.getElementById('resultsContent');
+            
+            resultsSection.style.display = 'block';
+            resultsContent.innerHTML = '<p style="text-align:center; color:#666;">🔄 過去データを読み込み中...</p>';
+            
+            try {
+                const response = await fetch('/api/historical', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        method: method,
+                        days_ago: period
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    displayHistoricalResults(data.results, method, period);
+                } else {
+                    resultsContent.innerHTML = `<p style="text-align:center; color:#e53935;">⚠️ エラー: ${data.error}</p>`;
+                }
+            } catch (error) {
+                resultsContent.innerHTML = `<p style="text-align:center; color:#e53935;">⚠️ エラー: ${error.message}</p>`;
+            }
+        }
+
+        function displayHistoricalResults(results, method, period) {
+            const resultsContent = document.getElementById('resultsContent');
+            
+            if (!results || results.length === 0) {
+                resultsContent.innerHTML = '<p style="text-align:center; color:#666;">📄 過去データが見つかりませんでした。</p>';
+                return;
+            }
+            
+            const methodNames = {
+                'perfect_order': 'パーフェクトオーダー',
+                'bollinger_band': 'ボリンジャーバンド',
+                '200day_pullback': '200日新高値押し目'
+            };
+            
+            let html = `
+                <div style="background: #e3f2fd; padding: 15px; border-radius: 10px; margin-bottom: 20px;">
+                    <h3 style="color: #1976d2; margin-bottom: 10px;">📅 ${methodNames[method]} - ${period}日前のデータ</h3>
+                    <p style="color: #666;">検出銘柄数: <strong>${results.length}件</strong></p>
+                </div>
+                <table class="results-table">
+                    <thead>
+                        <tr>
+                            <th>銘柄コード</th>
+                            <th>銘柄名</th>
+                            <th>市場</th>
+                            <th>終値</th>
+                            <th>出来高</th>
+                            <th>詳細</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+            `;
+            
+            results.forEach(stock => {
+                let detailBadges = '';
+                
+                if (method === 'perfect_order') {
+                    detailBadges = `
+                        <span class="badge badge-success">EMA10: ${stock.ema10?.toFixed(2) || '-'}</span>
+                        <span class="badge badge-warning">EMA20: ${stock.ema20?.toFixed(2) || '-'}</span>
+                        <span class="badge badge-info">EMA50: ${stock.ema50?.toFixed(2) || '-'}</span>
+                    `;
+                } else if (method === 'bollinger_band') {
+                    detailBadges = `
+                        <span class="badge ${stock.touch_direction === 'upper' ? 'badge-warning' : 'badge-info'}">
+                            ${stock.touch_direction === 'upper' ? '上限タッチ' : '下限タッチ'}
+                        </span>
+                    `;
+                } else if (method === '200day_pullback') {
+                    detailBadges = `
+                        <span class="badge badge-success">${stock.ema_touch || '-'}</span>
+                        <span class="badge badge-info">ストキャス: ${stock.stochastic_k?.toFixed(1) || '-'}</span>
+                    `;
+                }
+                
+                html += `
+                    <tr>
+                        <td><strong>${stock.code}</strong></td>
+                        <td>${stock.name}</td>
+                        <td><span class="badge badge-primary">${stock.market}</span></td>
+                        <td><strong>￥${stock.price.toLocaleString()}</strong></td>
+                        <td>${stock.volume.toLocaleString()}</td>
+                        <td>${detailBadges}</td>
+                    </tr>
+                `;
+            });
+            
+            html += `
+                    </tbody>
+                </table>
+            `;
+            
+            resultsContent.innerHTML = html;
+        }
+    </script>
+</body>
+</html>
+
