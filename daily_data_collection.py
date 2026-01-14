@@ -306,6 +306,9 @@ class AsyncJQuantsClient:
                 response.raise_for_status()
                 data = await response.json()
                 
+                # レート制限対応: APIコール後に待機
+                await asyncio.sleep(API_CALL_DELAY)
+                
                 # V2 API: dataキーを使用
                 if self.api_version == "v2":
                     result = data.get("data", [])
@@ -336,6 +339,9 @@ class AsyncJQuantsClient:
             async with session.get(url, headers=headers, params=params) as response:
                 response.raise_for_status()
                 data = await response.json()
+                
+                # レート制限対応: APIコール後に待機
+                await asyncio.sleep(API_CALL_DELAY)
                 
                 # V2 API: dataキーを使用
                 if self.api_version == "v2":
@@ -429,6 +435,9 @@ class AsyncJQuantsClient:
             async with session.get(url, headers=headers, params=params) as response:
                 response.raise_for_status()
                 data = await response.json()
+                
+                # レート制限対応: APIコール後に待機
+                await asyncio.sleep(API_CALL_DELAY)
                 
                 # V2 API: dataキーを使用
                 if self.api_version == "v2":
@@ -1055,9 +1064,12 @@ class StockScreener:
                     
                     return result
             
-            # 並列実行
-            tasks = [process_with_semaphore(stock) for stock in stocks]
-            results = await asyncio.gather(*tasks)
+            # 順次実行（レート制限対応）
+            results = []
+            for stock in stocks:
+                result = await process_with_semaphore(stock)
+                if result:
+                    results.append(result)
             
             # Noneを除外
             return [r for r in results if r is not None]
