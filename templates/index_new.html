@@ -713,7 +713,10 @@
                         'squeeze': 'スクイーズ（価格収縮）'
                     };
                     
-                    resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出`;
+                    // 現在の日付を取得
+                    const today = new Date();
+                    const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+                    resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出（${dateStr}）`;
                     
                     if (data.success && data.results.length > 0) {
                         let html = '<table><thead><tr>';
