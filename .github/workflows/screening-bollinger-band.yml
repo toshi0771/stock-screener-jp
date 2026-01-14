@@ -1,0 +1,36 @@
+name: Bollinger Band Screening
+
+on:
+  schedule:
+    # 平日 17:00 JST (08:00 UTC)
+    - cron: '0 8 * * 1-5'
+  workflow_dispatch:
+
+jobs:
+  screen-bollinger-band:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Bollinger Band Screening
+      env:
+        JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
+        JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}
+        JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      run: |
+        python run_bollinger_band.py
