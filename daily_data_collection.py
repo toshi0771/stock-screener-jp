@@ -187,6 +187,7 @@ class AsyncJQuantsClient:
             self.api_version = "v2"
             self.base_url = "https://api.jquants.com/v2"
             logger.info("✅ J-Quants API V2を使用します（APIキー認証）")
+            logger.info(f"✅ API Key: {self.api_key[:10]}...{self.api_key[-4:]}")
         elif self.refresh_token:
             self.api_version = "v1"
             self.base_url = "https://api.jquants.com/v1"
@@ -604,7 +605,8 @@ class StockScreener:
     async def screen_stock_perfect_order(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のパーフェクトオーダースクリーニング（200SMAオプション付き）"""
         code = stock["Code"]
-        name = stock.get("CompanyName", f"銘柄{code}")
+        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
+        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
@@ -671,7 +673,8 @@ class StockScreener:
     async def screen_stock_bollinger_band(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のボリンジャーバンドスクリーニング"""
         code = stock["Code"]
-        name = stock.get("CompanyName", f"銘柄{code}")
+        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
+        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
@@ -737,7 +740,8 @@ class StockScreener:
         self.pullback_stats['total'] += 1
         
         code = stock["Code"]
-        name = stock.get("CompanyName", f"銘柄{code}")
+        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
+        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
@@ -905,7 +909,8 @@ class StockScreener:
     async def screen_stock_squeeze(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のスクイーズ（価格収縮）スクリーニング"""
         code = stock["Code"]
-        name = stock.get("CompanyName", f"銘柄{code}")
+        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
+        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
