@@ -27,7 +27,7 @@ async def main():
         logger.info("🔍 営業日チェック中...")
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            if not await screener.is_trading_day(session, target_date):
+            if not await screener.client.is_trading_day(session, target_date):
                 logger.info(f"⚠️  {target_date}は取引日ではありません。処理を終了します。")
                 return
         
