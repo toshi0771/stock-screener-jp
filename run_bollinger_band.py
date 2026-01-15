@@ -22,9 +22,11 @@ async def main():
         logger.info("=" * 80)
         
         # 営業日チェック
-        if not await screener.is_trading_day(target_date):
-            logger.info(f"⚠️  {target_date}は取引日ではありません。処理を終了します。")
-            return
+        import aiohttp
+        async with aiohttp.ClientSession() as session:
+            if not await screener.is_trading_day(session, target_date):
+                logger.info(f"⚠️  {target_date}は取引日ではありません。処理を終了します。")
+                return
         
         logger.info(f"✅ 実行日: {target_date}")
         logger.info("📊 Supabase接続成功")
