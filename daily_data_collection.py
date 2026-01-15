@@ -573,6 +573,7 @@ class StockScreener:
     
     def __init__(self):
         self.jq_client = AsyncJQuantsClient()
+        self.client = self.jq_client  # ラッパースクリプトとの互換性のため
         self.sb_client = SupabaseClient()
         self.session = None
         self.progress = {"total": 0, "processed": 0, "detected": 0}
@@ -611,6 +612,23 @@ class StockScreener:
         }
         return market_map.get(code, code)
     
+    async def get_stocks_list(self):
+        """銘柄リストを取得してフィルタリング"""
+        today = datetime.now().strftime('%Y-%m-%d')
+        target_date_str = today.replace("-", "")
+        
+        connector = aiohttp.TCPConnector()
+        async with aiohttp.ClientSession(connector=connector) as session:
+            await self.jq_client.authenticate(session)
+            all_stocks_data = await self.jq_client.get_listed_info(session, date=target_date_str)
+            
+            if not all_stocks_data:
+                return []
+            
+            market_field = "Mkt" if self.jq_client.api_version == "v2" else "MarketCode"
+            market_codes = {"0111": "プライム", "0112": "スタンダード", "0113": "グロース"}
+            return [s for s in all_stocks_data if s.get(market_field) in market_codes]
+
     async def screen_stock_perfect_order(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のパーフェクトオーダースクリーニング（200SMAオプション付き）"""
         code = stock["Code"]
