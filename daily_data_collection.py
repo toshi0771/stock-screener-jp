@@ -55,7 +55,7 @@ CONCURRENT_REQUESTS = 1  # 同時実行数（レート制限対応: 60件/分 = 
 HISTORY_DAYS = 90
 RETRY_COUNT = 3
 RETRY_DELAY = 2
-API_CALL_DELAY = 1.1  # APIコール間の待機時間（秒）
+API_CALL_DELAY = 2.0  # APIコール間の待機時間（秒）（レート制限対応: 1.1→2.0秒）
 
 
 def safe_float(value, default=None):

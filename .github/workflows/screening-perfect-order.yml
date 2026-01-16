@@ -2,8 +2,8 @@ name: Perfect Order Screening
 
 on:
   schedule:
-    # 平日 16:00 JST (07:00 UTC)
-    - cron: '0 7 * * 1-5'
+    # 平日 20:00 JST (11:00 UTC) - レート制限対応のため間隔を確保
+    - cron: '0 11 * * 1-5'
   workflow_dispatch:
 
 jobs:
