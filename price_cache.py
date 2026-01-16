@@ -6,7 +6,9 @@ import asyncio
 from datetime import datetime
 from typing import Dict, Optional
 import pandas as pd
-from loguru import logger
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class PriceDataCache:
