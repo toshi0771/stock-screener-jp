@@ -16,6 +16,7 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 import pytz
 import math
+from price_cache import get_cache
 
 # ============================================================
 # スクリーニングオプション設定
@@ -577,6 +578,7 @@ class StockScreener:
         self.sb_client = SupabaseClient()
         self.session = None
         self.progress = {"total": 0, "processed": 0, "detected": 0}
+        self.cache = get_cache()  # 共有キャッシュインスタンス
     
     def calculate_ema(self, series, period):
         """EMAを計算"""
@@ -642,10 +644,14 @@ class StockScreener:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=220)  # 200SMA計算のため余裕を持たせる（最適化: 300→220日）
             
-            df = await self.jq_client.get_prices_daily_quotes(
-                session, code,
-                start_date.strftime("%Y%m%d"),
-                end_date.strftime("%Y%m%d")
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            
+            # キャッシュから取得、なければAPIから取得
+            df = await self.cache.get_or_fetch(
+                code, start_str, end_str,
+                self.jq_client.get_prices_daily_quotes,
+                session, code, start_str, end_str
             )
             
             if df is None or len(df) < 200:
@@ -709,10 +715,14 @@ class StockScreener:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=150)  # 最適化: 260→150日
             
-            df = await self.jq_client.get_prices_daily_quotes(
-                session, code,
-                start_date.strftime("%Y%m%d"),
-                end_date.strftime("%Y%m%d")
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            
+            # キャッシュから取得、なければAPIから取得
+            df = await self.cache.get_or_fetch(
+                code, start_str, end_str,
+                self.jq_client.get_prices_daily_quotes,
+                session, code, start_str, end_str
             )
             
             if df is None or len(df) < 20:
@@ -797,10 +807,14 @@ class StockScreener:
             end_date = (now_jst - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
             start_date = end_date - timedelta(days=280)  # 最適化: 365→280日（200営業日以上を確保）
             
-            df = await self.jq_client.get_prices_daily_quotes(
-                session, code,
-                start_date.strftime("%Y%m%d"),
-                end_date.strftime("%Y%m%d")
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            
+            # キャッシュから取得、なければAPIから取得
+            df = await self.cache.get_or_fetch(
+                code, start_str, end_str,
+                self.jq_client.get_prices_daily_quotes,
+                session, code, start_str, end_str
             )
             
             if df is None or len(df) < 200:  # 約8ヶ月分のデータがあればOK
@@ -945,10 +959,14 @@ class StockScreener:
             end_date = datetime.now()
             start_date = end_date - timedelta(days=150)  # 100日分 + 余裕
             
-            df = await self.jq_client.get_prices_daily_quotes(
-                session, code,
-                start_date.strftime("%Y%m%d"),
-                end_date.strftime("%Y%m%d")
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            
+            # キャッシュから取得、なければAPIから取得
+            df = await self.cache.get_or_fetch(
+                code, start_str, end_str,
+                self.jq_client.get_prices_daily_quotes,
+                session, code, start_str, end_str
             )
             
             if df is None or len(df) < 100:
@@ -1249,6 +1267,9 @@ class StockScreener:
         
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info("=" * 60)
+        # キャッシュ統計を出力
+        self.cache.log_stats()
+        
         logger.info(f"全スクリーニング完了: {total_time:.1f}秒")
         
         return {
