@@ -640,7 +640,7 @@ class StockScreener:
         try:
             # 株価データ取得（200SMA用に追加データ取得）
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=300)  # 200SMA計算のため余裕を持たせる
+            start_date = end_date - timedelta(days=220)  # 200SMA計算のため余裕を持たせる（最適化: 300→220日）
             
             df = await self.jq_client.get_prices_daily_quotes(
                 session, code,
@@ -707,7 +707,7 @@ class StockScreener:
         
         try:
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=260)
+            start_date = end_date - timedelta(days=150)  # 最適化: 260→150日
             
             df = await self.jq_client.get_prices_daily_quotes(
                 session, code,
@@ -795,7 +795,7 @@ class StockScreener:
             now_jst = datetime.now(jst)
             # 前日までのデータを取得（当日のデータはまだ確定していない可能性があるため）
             end_date = (now_jst - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-            start_date = end_date - timedelta(days=365)
+            start_date = end_date - timedelta(days=250)  # 最適化: 365→250日（200営業日相当）
             
             df = await self.jq_client.get_prices_daily_quotes(
                 session, code,
