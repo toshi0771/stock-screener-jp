@@ -805,7 +805,7 @@ class StockScreener:
             now_jst = datetime.now(jst)
             # 前日までのデータを取得（当日のデータはまだ確定していない可能性があるため）
             end_date = (now_jst - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-            start_date = end_date - timedelta(days=280)  # 最適化: 365→280日（200営業日以上を確保）
+            start_date = end_date - timedelta(days=365)  # 52週（約1年）の新高値を正確に判定
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
