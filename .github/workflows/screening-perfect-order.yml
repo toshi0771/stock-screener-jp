@@ -24,6 +24,14 @@ jobs:
       with:
         python-version: '3.11'
     
+    - name: Restore stock price cache
+      uses: actions/cache@v4
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-${{ github.run_id }}
+        restore-keys: |
+          stock-prices-
+    
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip

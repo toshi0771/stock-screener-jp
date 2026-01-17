@@ -17,6 +17,7 @@ from typing import List, Dict, Any, Optional
 import pytz
 import math
 from price_cache import get_cache
+from persistent_cache import PersistentPriceCache
 
 # ============================================================
 # スクリーニングオプション設定
@@ -578,7 +579,8 @@ class StockScreener:
         self.sb_client = SupabaseClient()
         self.session = None
         self.progress = {"total": 0, "processed": 0, "detected": 0}
-        self.cache = get_cache()  # 共有キャッシュインスタンス
+        self.cache = get_cache()  # メモリキャッシュインスタンス
+        self.persistent_cache = PersistentPriceCache()  # 永続キャッシュインスタンス
     
     def calculate_ema(self, series, period):
         """EMAを計算"""
@@ -647,12 +649,19 @@ class StockScreener:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             
-            # キャッシュから取得、なければAPIから取得
-            df = await self.cache.get_or_fetch(
-                code, start_str, end_str,
-                self.jq_client.get_prices_daily_quotes,
-                session, code, start_str, end_str
-            )
+            # 永続キャッシュから取得を試みる
+            df = await self.persistent_cache.get(code, start_str, end_str)
+            
+            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
+            if df is None:
+                df = await self.cache.get_or_fetch(
+                    code, start_str, end_str,
+                    self.jq_client.get_prices_daily_quotes,
+                    session, code, start_str, end_str
+                )
+                # 取得したデータを永続キャッシュに保存
+                if df is not None:
+                    await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 200:
                 return None
@@ -718,12 +727,19 @@ class StockScreener:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             
-            # キャッシュから取得、なければAPIから取得
-            df = await self.cache.get_or_fetch(
-                code, start_str, end_str,
-                self.jq_client.get_prices_daily_quotes,
-                session, code, start_str, end_str
-            )
+            # 永続キャッシュから取得を試みる
+            df = await self.persistent_cache.get(code, start_str, end_str)
+            
+            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
+            if df is None:
+                df = await self.cache.get_or_fetch(
+                    code, start_str, end_str,
+                    self.jq_client.get_prices_daily_quotes,
+                    session, code, start_str, end_str
+                )
+                # 取得したデータを永続キャッシュに保存
+                if df is not None:
+                    await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 20:
                 return None
@@ -810,12 +826,19 @@ class StockScreener:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             
-            # キャッシュから取得、なければAPIから取得
-            df = await self.cache.get_or_fetch(
-                code, start_str, end_str,
-                self.jq_client.get_prices_daily_quotes,
-                session, code, start_str, end_str
-            )
+            # 永続キャッシュから取得を試みる
+            df = await self.persistent_cache.get(code, start_str, end_str)
+            
+            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
+            if df is None:
+                df = await self.cache.get_or_fetch(
+                    code, start_str, end_str,
+                    self.jq_client.get_prices_daily_quotes,
+                    session, code, start_str, end_str
+                )
+                # 取得したデータを永続キャッシュに保存
+                if df is not None:
+                    await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 200:  # 約8ヶ月分のデータがあればOK
                 return None
@@ -962,12 +985,19 @@ class StockScreener:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             
-            # キャッシュから取得、なければAPIから取得
-            df = await self.cache.get_or_fetch(
-                code, start_str, end_str,
-                self.jq_client.get_prices_daily_quotes,
-                session, code, start_str, end_str
-            )
+            # 永続キャッシュから取得を試みる
+            df = await self.persistent_cache.get(code, start_str, end_str)
+            
+            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
+            if df is None:
+                df = await self.cache.get_or_fetch(
+                    code, start_str, end_str,
+                    self.jq_client.get_prices_daily_quotes,
+                    session, code, start_str, end_str
+                )
+                # 取得したデータを永続キャッシュに保存
+                if df is not None:
+                    await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 100:
                 return None
@@ -1268,7 +1298,18 @@ class StockScreener:
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info("=" * 60)
         # キャッシュ統計を出力
+        logger.info("メモリキャッシュ統計:")
         self.cache.log_stats()
+        
+        # 永続キャッシュ統計を出力
+        persistent_stats = self.persistent_cache.get_stats()
+        logger.info("\n永続キャッシュ統計:")
+        logger.info(f"  ファイル数: {persistent_stats['files']}件")
+        logger.info(f"  合計サイズ: {persistent_stats['size_mb']}MB")
+        logger.info(f"  ヒット数: {persistent_stats['hits']}回")
+        logger.info(f"  ミス数: {persistent_stats['misses']}回")
+        logger.info(f"  ヒット率: {persistent_stats['hit_rate']}%")
+        logger.info("=" * 60)
         
         logger.info(f"全スクリーニング完了: {total_time:.1f}秒")
         
