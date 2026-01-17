@@ -642,7 +642,7 @@ class StockScreener:
         try:
             # 株価データ取得（200SMA用に追加データ取得）
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=220)  # 200SMA計算のため余裕を持たせる（最適化: 300→220日）
+            start_date = end_date - timedelta(days=300)  # 200SMA計算のため十分なデータを確保
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
