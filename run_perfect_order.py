@@ -3,6 +3,7 @@
 
 import asyncio
 import sys
+import os
 from datetime import datetime
 from daily_data_collection import (
     StockScreener, 
@@ -23,13 +24,21 @@ async def main():
         logger.info(f"日次株式スクリーニングデータ収集開始 (並列処理・全銘柄対応・オプション機能付き)")
         logger.info("=" * 80)
         
+        # 実行トリガーを判定
+        trigger = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
+        is_manual = (trigger == 'workflow_dispatch')
+        
         # 営業日チェック
         logger.info("🔍 営業日チェック中...")
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            if not await screener.client.is_trading_day(session, target_date):
-                logger.info(f"⚠️  {target_date}は取引日ではありません。処理を終了します。")
-                return
+            is_trading = await screener.client.is_trading_day(session, target_date)
+            
+            if not is_trading:
+                if is_manual:
+                    logger.warning(f"⚠️  {target_date}は休日ですが、手動実行のため処理を続行します")
+                else:
+                    return
         
         logger.info(f"✅ 実行日: {target_date}")
         
