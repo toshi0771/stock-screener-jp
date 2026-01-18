@@ -546,8 +546,15 @@ def get_history():
                 date_data['squeeze_within_1month'] = []
                 date_data['squeeze_1month_plus'] = []
         
-        # リストに変換してソート
-        history_list = sorted(history_dict.values(), key=lambda x: x['date'], reverse=True)
+        # リストに変換してソート（銘柄数が1つ以上ある日付のみ）
+        history_list = [
+            date_data for date_data in history_dict.values()
+            if (date_data['perfect_order'] > 0 or 
+                date_data['bollinger_band'] > 0 or 
+                date_data['pullback_200day'] > 0 or 
+                date_data['squeeze'] > 0)
+        ]
+        history_list = sorted(history_list, key=lambda x: x['date'], reverse=True)
         
         print(f"   取得件数: {len(history_list)}日分", file=sys.stderr)
         
