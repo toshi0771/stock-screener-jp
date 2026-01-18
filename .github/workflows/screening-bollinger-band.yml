@@ -28,7 +28,7 @@ jobs:
       uses: actions/cache@v4
       with:
         path: ~/.cache/stock_prices
-        key: stock-prices-${{ github.run_id }}
+        key: stock-prices-${{ github.run_number }}
         restore-keys: |
           stock-prices-
     
