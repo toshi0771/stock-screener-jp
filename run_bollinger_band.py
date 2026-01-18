@@ -4,7 +4,8 @@
 import asyncio
 import sys
 import os
-from datetime import datetime
+import pandas as pd
+from datetime import datetime, timedelta
 from daily_data_collection import (
     StockScreener, 
     sample_stocks_balanced,
@@ -17,6 +18,7 @@ async def main():
     screener = StockScreener()
     
     try:
+        # 仮の実行日（後で最新取引日に更新）
         target_date = datetime.now().strftime('%Y-%m-%d')
         logger.info("=" * 80)
         logger.info(f"ボリンジャーバンド±3σスクリーニング開始")
@@ -57,6 +59,28 @@ async def main():
         )
         bb_time = int((datetime.now() - bb_start).total_seconds() * 1000)
         logger.info(f"✅ ボリンジャーバンド検出: {len(bollinger_band)}銘柄 ({bb_time}ms)")
+        
+        # 最新取引日を取得（検出された銘柄から）
+        if bollinger_band:
+            # 最初の銘柄から最新取引日を取得
+            first_stock = bollinger_band[0]
+            code = first_stock["code"]
+            end_date = datetime.now()
+            start_date = end_date - timedelta(days=10)
+            start_str = start_date.strftime("%Y%m%d")
+            end_str = end_date.strftime("%Y%m%d")
+            
+            import aiohttp
+            async with aiohttp.ClientSession() as session:
+                df = await screener.cache.get_or_fetch(
+                    code, start_str, end_str,
+                    screener.jq_client.get_prices_daily_quotes,
+                    session, code, start_str, end_str
+                )
+                if df is not None and len(df) > 0:
+                    latest_date = df.iloc[-1]['Date']
+                    target_date = pd.to_datetime(latest_date).strftime('%Y-%m-%d')
+                    logger.info(f"📅 最新取引日: {target_date}")
         
         # 間引き処理
         bollinger_band_sampled = sample_stocks_balanced(bollinger_band, max_per_range=10)
