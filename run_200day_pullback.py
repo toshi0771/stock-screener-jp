@@ -107,7 +107,21 @@ async def main():
             screener.sb_client.save_detected_stocks(screening_id, week52_pullback_sampled)
             logger.info(f"💾 Supabase保存完了 (screening_id: {screening_id})")
         
+        # キャッシュ統計を出力
         logger.info("=" * 80)
+        logger.info("メモリキャッシュ統計:")
+        screener.cache.log_stats()
+        
+        # 永続キャッシュ統計を出力
+        persistent_stats = screener.persistent_cache.get_stats()
+        logger.info("\n永続キャッシュ統計:")
+        logger.info(f"  ファイル数: {persistent_stats['files']}件")
+        logger.info(f"  合計サイズ: {persistent_stats['size_mb']}MB")
+        logger.info(f"  ヒット数: {persistent_stats['hits']}回")
+        logger.info(f"  ミス数: {persistent_stats['misses']}回")
+        logger.info(f"  ヒット率: {persistent_stats['hit_rate']}%")
+        logger.info("=" * 80)
+        
         logger.info("✅ 200日新高値押し目スクリーニング完了")
         logger.info("=" * 80)
         
