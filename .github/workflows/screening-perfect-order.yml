@@ -25,12 +25,12 @@ jobs:
         python-version: '3.11'
     
     - name: Restore stock price cache
-      uses: actions/cache@v4
+      uses: actions/cache/restore@v4
       with:
         path: ~/.cache/stock_prices
         key: stock-prices-cache
         restore-keys: |
-          stock-prices-cache
+          stock-prices-
     
     - name: Install dependencies
       run: |
@@ -46,3 +46,10 @@ jobs:
         SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       run: |
         python run_perfect_order.py
+    
+    - name: Save stock price cache
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-cache-${{ github.run_id }}
