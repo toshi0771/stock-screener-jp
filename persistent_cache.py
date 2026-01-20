@@ -62,7 +62,7 @@ class PersistentPriceCache:
         """
         return self.cache_dir / f"{cache_key}.pkl"
     
-    def _is_cache_valid(self, cache_path: Path, max_age_days: int = 1) -> bool:
+    def _is_cache_valid(self, cache_path: Path, max_age_days: int = 7) -> bool:
         """
         キャッシュが有効かチェック
         
@@ -87,7 +87,7 @@ class PersistentPriceCache:
         stock_code: str,
         start_date: str,
         end_date: str,
-        max_age_days: int = 1
+        max_age_days: int = 7
     ) -> Optional[pd.DataFrame]:
         """
         キャッシュからデータを取得
