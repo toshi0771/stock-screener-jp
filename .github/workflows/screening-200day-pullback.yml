@@ -28,9 +28,9 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ~/.cache/stock_prices
-        key: stock-prices-cache
+        key: stock-prices-cache-${{ github.run_id }}
         restore-keys: |
-          stock-prices-
+          stock-prices-cache-
     
     - name: Install dependencies
       run: |
