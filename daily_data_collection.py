@@ -1056,6 +1056,11 @@ class StockScreener:
             # 条件3: ATRが低い
             atr_condition = current_atr <= atr_min_60d * atr_threshold
             
+            # デバッグログ：各条件の詳細を出力
+            logger.info(f"📊 [{code}] BBW: {current_bbw:.4f} <= {bbw_min_60d*bbw_threshold:.4f} = {bbw_condition}")
+            logger.info(f"📊 [{code}] 乖離率: {current_deviation:.2f}% <= {deviation_threshold:.2f}% = {deviation_condition}")
+            logger.info(f"📊 [{code}] ATR: {current_atr:.4f} <= {atr_min_60d*atr_threshold:.4f} = {atr_condition}")
+            
             # すべての条件を満たすか確認
             if not (bbw_condition and deviation_condition and atr_condition):
                 return None
