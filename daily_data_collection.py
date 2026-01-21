@@ -1060,6 +1060,9 @@ class StockScreener:
             if not (bbw_condition and deviation_condition and atr_condition):
                 return None
             
+            # デバッグログ：条件を満たした銘柄の情報を出力
+            logger.info(f"🔍 スクイーズ候補 [{code}]: BBW={current_bbw:.2f}/{bbw_min_60d*bbw_threshold:.2f}, 乖離={current_deviation:.2f}%, ATR={current_atr:.2f}/{atr_min_60d*atr_threshold:.2f}")
+            
             # 継続日数を計算
             duration = 0
             for i in range(1, min(len(prices), 30)):  # 最大30日まで遡る
@@ -1073,7 +1076,10 @@ class StockScreener:
             
             # 最小継続期間を満たすか確認
             if duration < min_duration:
+                logger.info(f"❌ スクイーズ候補 [{code}]: 継続期間不足 ({duration}日 < {min_duration}日)")
                 return None
+            
+            logger.info(f"✅ スクイーズ検出 [{code}]: 継続{duration}日")
             
             # 検出結果を返す
             return {
