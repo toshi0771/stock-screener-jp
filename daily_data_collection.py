@@ -985,19 +985,19 @@ class StockScreener:
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
             
-            # 永続キャッシュから取得を試みる
-            df = await self.persistent_cache.get(code, start_str, end_str)
+            # 永続キャッシュから取得を試みる (TEMPORARY DISABLE FOR TESTING)
+            # df = await self.persistent_cache.get(code, start_str, end_str)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
-            if df is None:
-                df = await self.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    self.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                # 取得したデータを永続キャッシュに保存
-                if df is not None:
-                    await self.persistent_cache.set(code, start_str, end_str, df)
+            # if df is None:  # TEMPORARY DISABLE FOR TESTING
+            df = await self.cache.get_or_fetch(
+                code, start_str, end_str,
+                self.jq_client.get_prices_daily_quotes,
+                session, code, start_str, end_str
+            )
+            # 取得したデータを永続キャッシュに保存 (TEMPORARY DISABLE FOR TESTING)
+            # if df is not None:
+            #     await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 100:
                 return None

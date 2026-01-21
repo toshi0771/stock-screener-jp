@@ -2,8 +2,8 @@ name: Squeeze Screening
 
 on:
   schedule:
-    # 平日 17:00 JST (08:00 UTC) - 処理が速いため2番目に実行
-    - cron: '0 8 * * 1-5'
+    # 平日 21:00 JST (12:00 UTC) - 最後に実行
+    - cron: '0 12 * * 1-5'
   workflow_dispatch:
 
 concurrency:
