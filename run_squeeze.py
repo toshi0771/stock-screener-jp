@@ -60,6 +60,20 @@ async def main():
         sq_time = int((datetime.now() - sq_start).total_seconds() * 1000)
         logger.info(f"✅ スクイーズ検出: {len(squeeze)}銘柄 ({sq_time}ms)")
         
+        # スクイーズ条件の統計情報を出力
+        if hasattr(screener, 'squeeze_stats'):
+            stats = screener.squeeze_stats
+            logger.info("\n" + "="*80)
+            logger.info("📊 スクイーズ条件チェック結果:")
+            logger.info(f"  全銘柄数: {stats['total']}")
+            logger.info(f"  データ取得成功: {stats['has_data']}銘柄")
+            logger.info(f"  BBW条件で除外: {stats['bbw_failed']}銘柄")
+            logger.info(f"  乖離率条件で除外: {stats['deviation_failed']}銘柄")
+            logger.info(f"  ATR条件で除外: {stats['atr_failed']}銘柄")
+            logger.info(f"  継続日数不足で除外: {stats['duration_failed']}銘柄")
+            logger.info(f"  最終検出数: {stats['passed_all']}銘柄")
+            logger.info("="*80)
+        
         # 最新取引日を取得（検出された銘柄から）
         if squeeze:
             first_stock = squeeze[0]

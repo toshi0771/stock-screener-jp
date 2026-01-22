@@ -972,6 +972,20 @@ class StockScreener:
     
     async def screen_stock_squeeze(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のスクイーズ（価格収縮）スクリーニング"""
+        # 統計情報用のカウンターを初期化（初回のみ）
+        if not hasattr(self, 'squeeze_stats'):
+            self.squeeze_stats = {
+                'total': 0,
+                'has_data': 0,
+                'bbw_failed': 0,
+                'deviation_failed': 0,
+                'atr_failed': 0,
+                'duration_failed': 0,
+                'passed_all': 0
+            }
+        
+        self.squeeze_stats['total'] += 1
+        
         code = stock["Code"]
         # V2 APIでは "CoName"、V1 APIでは "CompanyName"
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
@@ -1001,6 +1015,8 @@ class StockScreener:
             
             if df is None or len(df) < 100:
                 return None
+            
+            self.squeeze_stats['has_data'] += 1
             
             # 最新100日分を取得
             df = df.tail(100)
@@ -1056,17 +1072,18 @@ class StockScreener:
             # 条件3: ATRが低い
             atr_condition = current_atr <= atr_min_60d * atr_threshold
             
-            # デバッグログ：各条件の詳細を出力
-            logger.info(f"📊 [{code}] BBW: {current_bbw:.4f} <= {bbw_min_60d*bbw_threshold:.4f} = {bbw_condition}")
-            logger.info(f"📊 [{code}] 乖離率: {current_deviation:.2f}% <= {deviation_threshold:.2f}% = {deviation_condition}")
-            logger.info(f"📊 [{code}] ATR: {current_atr:.4f} <= {atr_min_60d*atr_threshold:.4f} = {atr_condition}")
-            
-            # すべての条件を満たすか確認
-            if not (bbw_condition and deviation_condition and atr_condition):
+            # 各条件をチェックして統計を記録
+            if not bbw_condition:
+                self.squeeze_stats['bbw_failed'] += 1
                 return None
             
-            # デバッグログ：条件を満たした銘柄の情報を出力
-            logger.info(f"🔍 スクイーズ候補 [{code}]: BBW={current_bbw:.2f}/{bbw_min_60d*bbw_threshold:.2f}, 乖離={current_deviation:.2f}%, ATR={current_atr:.2f}/{atr_min_60d*atr_threshold:.2f}")
+            if not deviation_condition:
+                self.squeeze_stats['deviation_failed'] += 1
+                return None
+            
+            if not atr_condition:
+                self.squeeze_stats['atr_failed'] += 1
+                return None
             
             # 継続日数を計算
             duration = 0
@@ -1081,9 +1098,11 @@ class StockScreener:
             
             # 最小継続期間を満たすか確認
             if duration < min_duration:
-                logger.info(f"❌ スクイーズ候補 [{code}]: 継続期間不足 ({duration}日 < {min_duration}日)")
+                self.squeeze_stats['duration_failed'] += 1
                 return None
             
+            # すべての条件を満たした
+            self.squeeze_stats['passed_all'] += 1
             logger.info(f"✅ スクイーズ検出 [{code}]: 継続{duration}日")
             
             # 検出結果を返す
