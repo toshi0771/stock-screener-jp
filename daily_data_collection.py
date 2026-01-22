@@ -16,6 +16,7 @@ import pandas as pd
 from typing import List, Dict, Any, Optional
 import pytz
 import math
+import psutil
 from price_cache import get_cache
 from persistent_cache import PersistentPriceCache
 
@@ -1132,13 +1133,19 @@ class StockScreener:
         self.progress["total"] = len(stocks)
         self.progress["processed"] = 0
         self.progress["detected"] = 0
-        
+                # 開始時のメモリ使用量をログ
+        process = psutil.Process(os.getpid())
+        mem_info = process.memory_info()
+        mem_mb = mem_info.rss / 1024 / 1024
+        vm = psutil.virtual_memory()
+        logger.info(f"💾 {method_name} 開始時メモリ: プロセス {mem_mb:.2f}MB / システム {vm.used/1024/1024/1024:.2f}GB ({vm.percent}%)")
+
         connector = aiohttp.TCPConnector(limit=CONCURRENT_REQUESTS)
-        timeout = aiohttp.ClientTimeout(total=30)
+        timeout = aiohttp.ClientTimeout(total=30) 
         
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session: 
             # 認証
-            await self.jq_client.authenticate(session)
+            await self.jq_client.authenticate(session) 
             
             # セマフォで同時実行数を制限
             semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
@@ -1147,10 +1154,14 @@ class StockScreener:
                 async with semaphore:
                     result = await screening_func(stock, session)
                     self.progress["processed"] += 1
-                    
                     if self.progress["processed"] % 100 == 0:
-                        logger.info(f"{method_name}: {self.progress['processed']}/{self.progress['total']} 処理完了 "
-                                  f"({self.progress['detected']}銘柄検出)")
+                        
+                    if self.progress["processed"] % 100 == 0:
+                       # メモリ使用量をログ
+                       mem_info = process.memory_info()
+                       mem_mb = mem_info.rss / 1024 / 1024
+                       logger.info(f"{method_name}: {self.progress['processed']}/{self.progress['total']} 処理完了 "
+                                 f"({self.progress['detected']}銘柄検出) - 💾 メモリ: {mem_mb:.2f}MB")
                     
                     if result:
                         self.progress["detected"] += 1
@@ -1166,7 +1177,13 @@ class StockScreener:
                 result = await process_with_semaphore(stock)
                 if result:
                     results.append(result)
-            
+                    
+            # 終了時のメモリ使用量をログ
+            mem_info = process.memory_info()
+            mem_mb = mem_info.rss / 1024 / 1024
+            vm = psutil.virtual_memory()
+            logger.info(f"💾 {method_name} 終了時メモリ: プロセス {mem_mb:.2f}MB / システム {vm.used/1024/1024/1024:.2f}GB ({vm.percent}%)")            
+           
             # Noneを除外
             return [r for r in results if r is not None]
     
