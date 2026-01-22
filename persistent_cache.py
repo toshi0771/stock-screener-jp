@@ -2,6 +2,7 @@
 永続キャッシュモジュール
 
 GitHub Actionsのキャッシュ機能と連携して、株価データを永続化します。
+差分更新に対応し、銘柄コードのみをキーとして効率的にキャッシュします。
 """
 
 import os
@@ -9,7 +10,7 @@ import pickle
 import logging
 from pathlib import Path
 from datetime import datetime, timedelta
-from typing import Optional
+from typing import Optional, Tuple
 import pandas as pd
 
 logger = logging.getLogger(__name__)
@@ -17,10 +18,12 @@ logger = logging.getLogger(__name__)
 
 class PersistentPriceCache:
     """
-    ファイルベースの永続株価データキャッシュ
+    ファイルベースの永続株価データキャッシュ（差分更新対応）
     
     GitHub Actionsのキャッシュ機能と連携して、
     株価データをファイルシステムに保存・読み込みします。
+    
+    キャッシュキーは銘柄コードのみとし、差分更新に対応します。
     """
     
     def __init__(self, cache_dir: str = "~/.cache/stock_prices"):
@@ -36,88 +39,148 @@ class PersistentPriceCache:
         
         logger.info(f"永続キャッシュ初期化: {self.cache_dir}")
     
-    def _get_cache_key(self, stock_code: str, start_date: str, end_date: str) -> str:
-        """
-        キャッシュキーを生成
-        
-        Args:
-            stock_code: 銘柄コード
-            start_date: 開始日（YYYYMMDD）
-            end_date: 終了日（YYYYMMDD）
-        
-        Returns:
-            キャッシュキー
-        """
-        return f"{stock_code}_{start_date}_{end_date}"
-    
-    def _get_cache_path(self, cache_key: str) -> Path:
+    def _get_cache_path(self, stock_code: str) -> Path:
         """
         キャッシュファイルのパスを取得
         
         Args:
-            cache_key: キャッシュキー
+            stock_code: 銘柄コード
         
         Returns:
             キャッシュファイルのパス
         """
-        return self.cache_dir / f"{cache_key}.pkl"
+        return self.cache_dir / f"{stock_code}.pkl"
     
-    def _is_cache_valid(self, cache_path: Path, max_age_days: int = 7) -> bool:
+    def _load_cache_data(self, cache_path: Path) -> Optional[Tuple[pd.DataFrame, str]]:
         """
-        キャッシュが有効かチェック
+        キャッシュファイルからデータと最終更新日を読み込む
         
         Args:
             cache_path: キャッシュファイルのパス
-            max_age_days: 最大有効日数
         
         Returns:
-            有効ならTrue
+            (DataFrame, 最終更新日YYYYMMDD)のタプル、失敗時はNone
         """
         if not cache_path.exists():
+            return None
+        
+        try:
+            with open(cache_path, 'rb') as f:
+                data = pickle.load(f)
+            
+            # 新形式: {'df': DataFrame, 'last_date': 'YYYYMMDD'}
+            if isinstance(data, dict) and 'df' in data and 'last_date' in data:
+                return data['df'], data['last_date']
+            
+            # 旧形式（互換性のため）: DataFrameのみ
+            if isinstance(data, pd.DataFrame):
+                # DataFrameから最終日付を取得
+                if 'Date' in data.columns and len(data) > 0:
+                    last_date = pd.to_datetime(data['Date'].iloc[-1]).strftime('%Y%m%d')
+                    return data, last_date
+                else:
+                    return None
+            
+            return None
+        
+        except Exception as e:
+            logger.warning(f"キャッシュ読み込みエラー [{cache_path.name}]: {e}")
+            return None
+    
+    def _save_cache_data(self, cache_path: Path, df: pd.DataFrame, last_date: str) -> bool:
+        """
+        データと最終更新日をキャッシュファイルに保存
+        
+        Args:
+            cache_path: キャッシュファイルのパス
+            df: 保存するDataFrame
+            last_date: 最終更新日（YYYYMMDD）
+        
+        Returns:
+            成功したらTrue
+        """
+        try:
+            data = {
+                'df': df,
+                'last_date': last_date
+            }
+            
+            with open(cache_path, 'wb') as f:
+                pickle.dump(data, f)
+            
+            logger.debug(f"キャッシュ保存: {cache_path.name} (最終日: {last_date})")
+            return True
+        
+        except Exception as e:
+            logger.warning(f"キャッシュ保存エラー [{cache_path.name}]: {e}")
             return False
-        
-        # ファイルの最終更新日時を取得
-        mtime = datetime.fromtimestamp(cache_path.stat().st_mtime)
-        age = datetime.now() - mtime
-        
-        return age.days < max_age_days
     
     async def get(
         self,
         stock_code: str,
         start_date: str,
         end_date: str,
-        max_age_days: int = 7
+        max_age_days: int = 30
     ) -> Optional[pd.DataFrame]:
         """
-        キャッシュからデータを取得
+        キャッシュからデータを取得（必要な期間のみ返す）
         
         Args:
             stock_code: 銘柄コード
             start_date: 開始日（YYYYMMDD）
             end_date: 終了日（YYYYMMDD）
-            max_age_days: 最大有効日数
+            max_age_days: 最大有効日数（デフォルト30日）
         
         Returns:
-            キャッシュされたDataFrame、なければNone
+            キャッシュされたDataFrame（指定期間のみ）、なければNone
         """
-        cache_key = self._get_cache_key(stock_code, start_date, end_date)
-        cache_path = self._get_cache_path(cache_key)
+        cache_path = self._get_cache_path(stock_code)
+        result = self._load_cache_data(cache_path)
         
-        if not self._is_cache_valid(cache_path, max_age_days):
+        if result is None:
             self.misses += 1
             return None
         
+        df, last_date = result
+        
+        # 最終更新日が古すぎる場合は無効
         try:
-            with open(cache_path, 'rb') as f:
-                df = pickle.load(f)
+            last_update = datetime.strptime(last_date, '%Y%m%d')
+            age = datetime.now() - last_update
             
-            self.hits += 1
-            logger.debug(f"キャッシュヒット: {cache_key}")
-            return df
+            if age.days > max_age_days:
+                logger.debug(f"キャッシュ期限切れ: {stock_code} (最終更新: {last_date}, {age.days}日前)")
+                self.misses += 1
+                return None
+        except Exception as e:
+            logger.warning(f"日付解析エラー [{stock_code}]: {e}")
+            self.misses += 1
+            return None
+        
+        # 必要な期間のデータを抽出
+        try:
+            if 'Date' in df.columns:
+                df['Date'] = pd.to_datetime(df['Date'])
+                start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+                end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+                
+                filtered_df = df[(df['Date'] >= start_dt) & (df['Date'] <= end_dt)].copy()
+                
+                # 必要な期間のデータが十分にあるか確認
+                if len(filtered_df) > 0:
+                    self.hits += 1
+                    logger.debug(f"キャッシュヒット: {stock_code} ({len(filtered_df)}行)")
+                    return filtered_df
+                else:
+                    logger.debug(f"キャッシュに必要な期間のデータなし: {stock_code}")
+                    self.misses += 1
+                    return None
+            else:
+                self.misses += 1
+                return None
         
         except Exception as e:
-            logger.warning(f"キャッシュ読み込みエラー [{cache_key}]: {e}")
+            logger.warning(f"データフィルタリングエラー [{stock_code}]: {e}")
             self.misses += 1
             return None
     
@@ -129,7 +192,9 @@ class PersistentPriceCache:
         df: pd.DataFrame
     ) -> bool:
         """
-        データをキャッシュに保存
+        データをキャッシュに保存（差分更新対応）
+        
+        既存のキャッシュがある場合は、新しいデータとマージします。
         
         Args:
             stock_code: 銘柄コード
@@ -140,18 +205,46 @@ class PersistentPriceCache:
         Returns:
             成功したらTrue
         """
-        cache_key = self._get_cache_key(stock_code, start_date, end_date)
-        cache_path = self._get_cache_path(cache_key)
+        if df is None or len(df) == 0:
+            return False
         
-        try:
-            with open(cache_path, 'wb') as f:
-                pickle.dump(df, f)
+        cache_path = self._get_cache_path(stock_code)
+        
+        # 既存のキャッシュを読み込む
+        result = self._load_cache_data(cache_path)
+        
+        if result is not None:
+            existing_df, _ = result
             
-            logger.debug(f"キャッシュ保存: {cache_key}")
-            return True
+            # 既存データと新しいデータをマージ
+            try:
+                # Date列を datetime 型に変換
+                existing_df['Date'] = pd.to_datetime(existing_df['Date'])
+                df['Date'] = pd.to_datetime(df['Date'])
+                
+                # 重複を削除してマージ
+                merged_df = pd.concat([existing_df, df]).drop_duplicates(subset=['Date'], keep='last')
+                merged_df = merged_df.sort_values('Date').reset_index(drop=True)
+                
+                # 最終日付を取得
+                last_date = merged_df['Date'].iloc[-1].strftime('%Y%m%d')
+                
+                logger.debug(f"キャッシュマージ: {stock_code} (既存: {len(existing_df)}行, 新規: {len(df)}行, 合計: {len(merged_df)}行)")
+                
+                return self._save_cache_data(cache_path, merged_df, last_date)
+            
+            except Exception as e:
+                logger.warning(f"キャッシュマージエラー [{stock_code}]: {e}")
+                # マージ失敗時は新しいデータで上書き
+        
+        # 新規保存
+        try:
+            df['Date'] = pd.to_datetime(df['Date'])
+            last_date = df['Date'].iloc[-1].strftime('%Y%m%d')
+            return self._save_cache_data(cache_path, df, last_date)
         
         except Exception as e:
-            logger.warning(f"キャッシュ保存エラー [{cache_key}]: {e}")
+            logger.warning(f"キャッシュ保存エラー [{stock_code}]: {e}")
             return False
     
     def get_stats(self) -> dict:
@@ -177,7 +270,7 @@ class PersistentPriceCache:
             "hit_rate": round(hit_rate, 2)
         }
     
-    def clear_old_cache(self, max_age_days: int = 7):
+    def clear_old_cache(self, max_age_days: int = 30):
         """
         古いキャッシュファイルを削除
         
@@ -188,6 +281,7 @@ class PersistentPriceCache:
         deleted_count = 0
         
         for cache_file in self.cache_dir.glob("*.pkl"):
+            # ファイルの最終更新日時をチェック
             mtime = datetime.fromtimestamp(cache_file.stat().st_mtime)
             age = now - mtime
             
