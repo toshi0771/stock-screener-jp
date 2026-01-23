@@ -1154,7 +1154,6 @@ class StockScreener:
                 async with semaphore:
                     result = await screening_func(stock, session)
                     self.progress["processed"] += 1
-                    if self.progress["processed"] % 100 == 0:
                         
                     if self.progress["processed"] % 100 == 0:
                        # メモリ使用量をログ
