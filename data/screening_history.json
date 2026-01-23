@@ -11243,5 +11243,20 @@
       }
     ],
     "52week_pullback": []
+  },
+  "2026-01-10": {
+    "date": "2026-01-10",
+    "timestamp": "2026-01-10T17:25:00.752454",
+    "total_stocks": 0,
+    "execution_time_seconds": 0.6,
+    "options": {
+      "perfect_order_sma200": "all",
+      "pullback_ema": "all",
+      "pullback_stochastic": false
+    },
+    "perfect_order": [],
+    "bollinger_band": [],
+    "200day_pullback": [],
+    "squeeze": []
   }
 }

@@ -396,9 +396,9 @@
             </button>
         </div>
 
-        <!-- 52週新高値押し目 -->
+        <!-- 200日新高値押し目 -->
         <div class="screening-section">
-            <h2 class="screening-title">🚀 52週新高値押し目</h2>
+            <h2 class="screening-title">🚀 200日新高値押し目</h2>
             <div class="options-grid">
                 <div class="option-group">
                     <div class="option-label">市場選択</div>
@@ -430,7 +430,7 @@
                 </div>
             </div>
             <button class="execute-btn" onclick="execute52WeekPullback()">
-                52週新高値押し目検出を実行
+                200日新高値押し目検出を実行
             </button>
         </div>
 
@@ -444,7 +444,7 @@
                         <select id="history_method">
                             <option value="perfect_order">パーフェクトオーダー</option>
                             <option value="bollinger_band">ボリンジャーバンド</option>
-                            <option value="52week_pullback">52週新高値押し目</option>
+                            <option value="200day_pullback">200日新高値押し目</option>
                         </select>
                     </div>
                 </div>
@@ -492,7 +492,7 @@
             const market = document.getElementById('pullback_market').value;
             const emaTouchFilter = document.getElementById('ema_touch_filter').value;
             const stochasticFilter = document.getElementById('stochastic_filter').checked;
-            await executeScreening('52week_pullback', { 
+            await executeScreening('200day_pullback', { 
                 market: market,
                 ema_touch: emaTouchFilter,
                 stochastic_filter: stochasticFilter 
@@ -566,7 +566,7 @@
             const methodNames = {
                 'perfect_order': 'パーフェクトオーダー',
                 'bollinger_band': 'ボリンジャーバンド±3σ',
-                '52week_pullback': '52週新高値押し目'
+                '200day_pullback': '200日新高値押し目'
             };
 
             const marketLabel = options.market === 'all' ? '全市場' : options.market;
@@ -616,7 +616,7 @@
                             ${stock.touch_direction === 'upper' ? '上限タッチ' : '下限タッチ'}
                         </span>
                     `;
-                } else if (method === '52week_pullback') {
+                } else if (method === '200day_pullback') {
                     detailBadges = `
                         <span class="badge badge-success">${stock.ema_touch || '-'}</span>
                         <span class="badge badge-info">ストキャス: ${stock.stochastic_k?.toFixed(1) || '-'}</span>
@@ -687,7 +687,7 @@
             const methodNames = {
                 'perfect_order': 'パーフェクトオーダー',
                 'bollinger_band': 'ボリンジャーバンド',
-                '52week_pullback': '52週新高値押し目'
+                '200day_pullback': '200日新高値押し目'
             };
             
             let html = `
@@ -724,7 +724,7 @@
                             ${stock.touch_direction === 'upper' ? '上限タッチ' : '下限タッチ'}
                         </span>
                     `;
-                } else if (method === '52week_pullback') {
+                } else if (method === '200day_pullback') {
                     detailBadges = `
                         <span class="badge badge-success">${stock.ema_touch || '-'}</span>
                         <span class="badge badge-info">ストキャス: ${stock.stochastic_k?.toFixed(1) || '-'}</span>

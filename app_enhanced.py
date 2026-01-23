@@ -221,7 +221,7 @@ def screen_bollinger_band():
 
 @app.route('/api/screen/52week_pullback', methods=['POST'])
 def screen_52week_pullback():
-    """52週新高値押し目スクリーニング"""
+    """200日新高値押し目スクリーニング"""
     try:
         params = request.json or {}
         market_filter = params.get('market', 'all')

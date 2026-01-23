@@ -1,0 +1,55 @@
+name: Squeeze Screening
+
+on:
+  schedule:
+    # 平日 21:00 JST (12:00 UTC) - 最後に実行
+    - cron: '0 12 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: stock-screening
+  cancel-in-progress: false
+
+jobs:
+  screen-squeeze:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+    
+    - name: Restore stock price cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-cache-${{ github.run_id }}
+        restore-keys: |
+          stock-prices-cache-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Squeeze Screening
+      env:
+        JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
+        JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}
+        JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      run: |
+        python run_squeeze.py
+    
+    - name: Save stock price cache
+      uses: actions/cache/save@v4
+      if: always()
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-cache-${{ github.run_id }}

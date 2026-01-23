@@ -1,0 +1,14 @@
+2026-01-09 15:18:10,658 - INFO - ============================================================
+2026-01-09 15:18:10,658 - INFO - 日次株式スクリーニングデータ収集開始（並列処理・全銘柄対応・オプション機能付き）
+2026-01-09 15:18:10,658 - INFO - ============================================================
+2026-01-09 15:18:10,658 - ERROR - エラーが発生しました: JQUANTS_API_KEY または JQUANTS_REFRESH_TOKEN が設定されていません
+Traceback (most recent call last):
+  File "/home/ubuntu/stock-screener-jp/daily_data_collection.py", line 1286, in main
+    screener = StockScreener()
+               ^^^^^^^^^^^^^^^
+  File "/home/ubuntu/stock-screener-jp/daily_data_collection.py", line 549, in __init__
+    self.jq_client = AsyncJQuantsClient()
+                     ^^^^^^^^^^^^^^^^^^^^
+  File "/home/ubuntu/stock-screener-jp/daily_data_collection.py", line 196, in __init__
+    raise ValueError("JQUANTS_API_KEY または JQUANTS_REFRESH_TOKEN が設定されていません")
+ValueError: JQUANTS_API_KEY または JQUANTS_REFRESH_TOKEN が設定されていません

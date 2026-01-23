@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>株式スクリーニング</title>
-    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
     <style>
         * {
             margin: 0;
@@ -303,66 +302,33 @@
             color: #999;
             font-size: 18px;
         }
-        
-        /* アコーディオンボタン */
-        .show-more-button {
-            width: 100%;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 8px;
-            padding: 15px;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            margin-top: 15px;
-            transition: all 0.3s ease;
-        }
-        
-        .show-more-button:hover {
-            background: #45a049;
-            transform: translateY(-2px);
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
-        }
-        
-        .hidden-rows {
-            display: none;
-        }
-        
-        .hidden-rows.show {
-            display: table-row;
-        }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
-            <h1>株式スクリーニング</h1>
-            <p class="subtitle">スイングトレード上昇銘柄を4つの手法で一発検索</p>
-            <p style="color: #d9534f; font-size: 14px; margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                <strong>ご注意：</strong>スクリーニングは只今データ取得に時間を要するため翌日早朝4時以降にご利用ください。
-            </p>
+            <h1>📊 株式スクリーニング</h1>
+            <p class="subtitle">jQuants API × Supabase 実データ連携版</p>
         </header>
         
         <!-- ボタングリッド -->
         <div class="button-grid">
             <div class="card-button" data-method="perfect_order">
+                <div class="icon">📈</div>
                 <div class="title">パーフェクト<br>オーダー</div>
             </div>
             <div class="card-button" data-method="bollinger_band">
+                <div class="icon">📉</div>
                 <div class="title">ボリンジャー<br>バンド</div>
             </div>
             <div class="card-button" data-method="200day_pullback">
-                <div class="title">200日新高値<br>押し目</div>
+                <div class="icon">🎯</div>
+                <div class="title">52週新高値<br>押し目</div>
             </div>
-            <div class="card-button" data-method="squeeze">
-                <div class="title">スクイーズ<br>（価格収縮）</div>
+            <div class="card-button" data-method="history">
+                <div class="icon">📅</div>
+                <div class="title">過去データ</div>
             </div>
-        </div>
-        
-        <!-- 過去データボタン（横幅いっぱい） -->
-        <div class="card-button" data-method="history" style="width: 100%; margin-top: 15px; margin-bottom: 20px;">
-            <div class="title">過去データ</div>
         </div>
         
         <!-- 過去データ用プルダウン -->
@@ -399,18 +365,9 @@
                 <label class="option-label">株価と50EMAとの乖離率</label>
                 <select class="option-select" id="ema50DivergenceSelect">
                     <option value="all">全て</option>
-                    <option value="5">5%未満</option>
                     <option value="10">10%未満</option>
-                </select>
-            </div>
-            
-            <!-- ボリンジャーバンド専用オプション -->
-            <div class="option-group" id="bollingerOptions" style="display: none;">
-                <label class="option-label">σ選択</label>
-                <select class="option-select" id="sigmaSelect">
-                    <option value="all">全て</option>
-                    <option value="upper">+3σ</option>
-                    <option value="lower">-3σ</option>
+                    <option value="20">20%未満</option>
+                    <option value="30">30%未満</option>
                 </select>
             </div>
             
@@ -435,23 +392,11 @@
                     <span id="stochasticLabel">OFF</span>
                 </div>
             </div>
-            
-            <!-- スクイーズ専用オプション -->
-            <div class="option-group" id="squeezeOptions" style="display: none;">
-                <label class="option-label">継続期間フィルター</label>
-                <select class="option-select" id="durationFilter">
-                    <option value="all">全て</option>
-                    <option value="1week">1週間以内（1-7日）</option>
-                    <option value="1-2weeks">1週間～2週間（8-14日）</option>
-                    <option value="2weeks-1month">2週間～1か月（15-30日）</option>
-                    <option value="1month+">1か月以上（31日以上）</option>
-                </select>
-            </div>
         </div>
         
         <!-- スクリーニング実行ボタン -->
         <button class="execute-button" id="executeButton">
-            スクリーニング実行
+            🔍 スクリーニング実行
         </button>
         
         <!-- 結果表示エリア -->
@@ -487,10 +432,8 @@
                 const optionsArea = document.getElementById('optionsArea');
                 const perfectOrderOptions = document.getElementById('perfectOrderOptions');
                 const perfectOrderOptions2 = document.getElementById('perfectOrderOptions2');
-                const bollingerOptions = document.getElementById('bollingerOptions');
                 const pullbackOptions = document.getElementById('pullbackOptions');
                 const pullbackOptions2 = document.getElementById('pullbackOptions2');
-                const squeezeOptions = document.getElementById('squeezeOptions');
                 
                 if (selectedMethod === 'history') {
                     periodSelect.classList.add('show');
@@ -503,36 +446,18 @@
                     if (selectedMethod === 'perfect_order') {
                         perfectOrderOptions.style.display = 'block';
                         perfectOrderOptions2.style.display = 'block';
-                        bollingerOptions.style.display = 'none';
-                        pullbackOptions.style.display = 'none';
-                        pullbackOptions2.style.display = 'none';
-                    } else if (selectedMethod === 'bollinger_band') {
-                        perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
-                        bollingerOptions.style.display = 'block';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === '200day_pullback') {
                         perfectOrderOptions.style.display = 'none';
                         perfectOrderOptions2.style.display = 'none';
-                        bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'block';
                         pullbackOptions2.style.display = 'block';
-                        squeezeOptions.style.display = 'none';
-                    } else if (selectedMethod === 'squeeze') {
-                        perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
-                        bollingerOptions.style.display = 'none';
-                        pullbackOptions.style.display = 'none';
-                        pullbackOptions2.style.display = 'none';
-                        squeezeOptions.style.display = 'block';
                     } else {
                         perfectOrderOptions.style.display = 'none';
                         perfectOrderOptions2.style.display = 'none';
-                        bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
-                        squeezeOptions.style.display = 'none';
                     }
                 }
                 
@@ -562,105 +487,33 @@
                     const period = document.getElementById('periodSelect').value;
                     const response = await fetch(`/api/history?days=${period}`);
                     const data = await response.json();
-                          if (data.success && data.history.length > 0) {
-                        resultsTitle.textContent = `過去データ（${period}日間）`;
-                        
+                    
+                    resultsTitle.textContent = `過去${period}日間のスクリーニング履歴`;
+                    
+                    if (data.success && data.history.length > 0) {
                         // CSVダウンロードボタンを追加
                         let html = '<div style="margin-bottom: 20px; text-align: right;">';
                         html += `<button onclick="downloadHistoryCSV(${period})" style="padding: 10px 20px; background: #4CAF50; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 14px;">`;
-                        html += 'CSVダウンロード';
+                        html += '💾 CSVダウンロード';
                         html += '</button></div>';
                         
-                        // 分類別の表示
+                        html += '<table><thead><tr>';
+                        html += '<th>日付</th>';
+                        html += '<th>パーフェクトオーダー</th>';
+                        html += '<th>ボリンジャーバンド</th>';
+                        html += '<th>200日新高値押し目</th>';
+                        html += '</tr></thead><tbody>';
+                        
                         data.history.forEach(row => {
-                            html += `<div style="margin-bottom: 40px; border: 1px solid #ddd; border-radius: 8px; padding: 20px; background: white;">`;
-                            html += `<h3 style="margin-top: 0; color: #1e3a8a;">日付: ${row.date}</h3>`;
-                            
-                            // パーフェクトオーダー（2列）
-                            html += '<div style="margin-bottom: 30px;">';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">パーフェクトオーダー</h4>';
-                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
-                            
-                            // 株価 > 200SMA
-                            html += '<div>';
-                            html += '<h5 style="color: #10b981; margin: 0 0 10px 0;">株価 > 200SMA (' + (row.perfect_order_above_200sma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.perfect_order_above_200sma, 'perfect_order_above');
-                            html += '</div>';
-                            
-                            // 株価 < 200SMA
-                            html += '<div>';
-                            html += '<h5 style="color: #f59e0b; margin: 0 0 10px 0;">株価 < 200SMA (' + (row.perfect_order_below_200sma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.perfect_order_below_200sma, 'perfect_order_below');
-                            html += '</div>';
-                            
-                            html += '</div></div>';
-                            
-                            // ボリンジャーバンド（2列）
-                            html += '<div style="margin-bottom: 30px;">';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">ボリンジャーバンド</h4>';
-                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
-                            
-                            // +3σ
-                            html += '<div>';
-                            html += '<h5 style="color: #ef4444; margin: 0 0 10px 0;">+3σタッチ (' + (row.bollinger_plus_3sigma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.bollinger_plus_3sigma, 'bollinger_plus');
-                            html += '</div>';
-                            
-                            // -3σ
-                            html += '<div>';
-                            html += '<h5 style="color: #3b82f6; margin: 0 0 10px 0;">-3σタッチ (' + (row.bollinger_minus_3sigma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.bollinger_minus_3sigma, 'bollinger_minus');
-                            html += '</div>';
-                            
-                            html += '</div></div>';
-                            
-                            // 200日新高値押し目（3列）
-                            html += '<div>';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">200日新高値押し目</h4>';
-                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 20px;">';
-                            
-                            // 10EMA
-                            html += '<div>';
-                            html += '<h5 style="color: #8b5cf6; margin: 0 0 10px 0;">10EMAタッチ (' + (row.pullback_10ema?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.pullback_10ema, 'pullback_10ema');
-                            html += '</div>';
-                            
-                            // 20EMA
-                            html += '<div>';
-                            html += '<h5 style="color: #ec4899; margin: 0 0 10px 0;">20EMAタッチ (' + (row.pullback_20ema?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.pullback_20ema, 'pullback_20ema');
-                            html += '</div>';
-                            
-                            // 50EMA
-                            html += '<div>';
-                            html += '<h5 style="color: #f97316; margin: 0 0 10px 0;">50EMAタッチ (' + (row.pullback_50ema?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.pullback_50ema, 'pullback_50ema');
-                            html += '</div>';
-                            
-                            html += '</div></div>';
-                            
-                            // スクイーズ（4列）
-                            html += '<div>';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">スクイーズ（価格収縮）</h4>';
-                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
-                            
-                            // 1か月以内
-                            html += '<div>';
-                            html += '<h5 style="color: #06b6d4; margin: 0 0 10px 0;">1か月以内 (' + (row.squeeze_within_1month?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.squeeze_within_1month, 'squeeze_within_1month');
-                            html += '</div>';
-                            
-                            // 1か月以上
-                            html += '<div>';
-                            html += '<h5 style="color: #f97316; margin: 0 0 10px 0;">1か月以上 (' + (row.squeeze_1month_plus?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.squeeze_1month_plus, 'squeeze_1month_plus');
-                            html += '</div>';
-                            
-                            html += '</div></div>';
-                            
-                            html += '</div>';
+                            html += '<tr>';
+                            html += `<td style="font-weight: bold;">${row.date}</td>`;
+                            html += `<td>${row.perfect_order_stocks || '-'}</td>`;
+                            html += `<td>${row.bollinger_band_stocks || '-'}</td>`;
+                            html += `<td>${row.pullback_stocks || '-'}</td>`;
+                            html += '</tr>';
                         });
                         
+                        html += '</tbody></table>';
                         resultsContent.innerHTML = html;
                     } else {
                         resultsContent.innerHTML = '<div class="no-data">データがありません</div>';
@@ -676,20 +529,10 @@
                         options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
                     }
                     
-                    // ボリンジャーバンドの場合、オプションを追加
-                    if (selectedMethod === 'bollinger_band') {
-                        options.sigma = document.getElementById('sigmaSelect').value;
-                    }
-                    
                     // 200日新高値押し目の場合、オプションを追加
                     if (selectedMethod === '200day_pullback') {
                         options.ema_touch = document.getElementById('emaTouchSelect').value;
                         options.use_stochastic = document.getElementById('stochasticToggle').checked;
-                    }
-                    
-                    // スクイーズの場合、オプションを追加
-                    if (selectedMethod === 'squeeze') {
-                        options.duration_filter = document.getElementById('durationFilter').value;
                     }
                     
                     // スクリーニング実行
@@ -709,14 +552,10 @@
                     const methodNames = {
                         'perfect_order': 'パーフェクトオーダー',
                         'bollinger_band': 'ボリンジャーバンド±3σ',
-                        '200day_pullback': '200日新高値押し目',
-                        'squeeze': 'スクイーズ（価格収縮）'
+                        '200day_pullback': '200日新高値押し目'
                     };
                     
-                    // 現在の日付を取得
-                    const today = new Date();
-                    const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
-                    resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出（${dateStr}）`;
+                    resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出`;
                     
                     if (data.success && data.results.length > 0) {
                         let html = '<table><thead><tr>';
@@ -727,20 +566,18 @@
                         } else if (selectedMethod === 'bollinger_band') {
                             html += '<th>SMA20</th><th>上限3σ</th><th>下限3σ</th>';
                         } else if (selectedMethod === '200day_pullback') {
-                            html += '<th>200日高値</th><th>押し目率</th><th>タッチEMA</th>';
+                            html += '<th>52週高値</th><th>押し目率</th><th>タッチEMA</th>';
                         }
                         
                         html += '</tr></thead><tbody>';
                         
-                        data.results.forEach((stock, index) => {
-                            // 5桁コードを4桁に変換（末尾〆0を削除）
+                        data.results.forEach(stock => {
+                            // 5桁コードを4桁に変換（末尾の0を削除）
                             let code = stock.code.toString();
                             if (code.length === 5 && code.endsWith('0')) {
                                 code = code.slice(0, 4);
                             }
-                            // 21銘柄以降はhidden-rowsクラスを付与
-                            const rowClass = index >= 20 ? ' class="hidden-rows"' : '';
-                            html += `<tr${rowClass}>`;
+                            html += '<tr>';
                             html += `<td>${code}</td>`;
                             html += `<td>${stock.name}</td>`;
                             html += `<td>${stock.market}</td>`;
@@ -756,8 +593,8 @@
                                 html += `<td>${stock.upper_3sigma ? stock.upper_3sigma.toFixed(2) : '-'}</td>`;
                                 html += `<td>${stock.lower_3sigma ? stock.lower_3sigma.toFixed(2) : '-'}</td>`;
                             } else if (selectedMethod === '200day_pullback') {
-                                html += `<td>${stock.week52_high ? stock.week52_high.toLocaleString() : '-'}</td>`;
-                                html += `<td>${stock.pullback_percentage ? stock.pullback_percentage.toFixed(2) + '%' : '-'}</td>`;
+                                html += `<td>${stock.high_52week ? stock.high_52week.toFixed(2) : '-'}</td>`;
+                                html += `<td>${stock.pullback_pct ? stock.pullback_pct.toFixed(2) + '%' : '-'}</td>`;
                                 html += `<td>${stock.ema_touch || '-'}</td>`;
                             }
                             
@@ -765,12 +602,6 @@
                         });
                         
                         html += '</tbody></table>';
-                        
-                        // 21銘柄以上ある場合は「もっと見る」ボタンを追加
-                        if (data.results.length > 20) {
-                            html += `<button class="show-more-button" onclick="toggleHiddenRows()">もっと見る (残り${data.results.length - 20}銘柄)</button>`;
-                        }
-                        
                         resultsContent.innerHTML = html;
                     } else {
                         resultsContent.innerHTML = '<div class="no-data">該当する銘柄が見つかりませんでした</div>';
@@ -818,88 +649,6 @@
             } catch (error) {
                 console.error('CSVダウンロードエラー:', error);
                 alert('CSVダウンロード中にエラーが発生しました');
-            }
-        }
-        
-        // 分類別銘柄表示関数（20銘柄+アコーディオン）
-        function renderCategoryStocks(stocks, categoryId) {
-            if (!stocks || stocks.length === 0) {
-                return '<div style="color: #999; font-style: italic; padding: 10px;">該当なし</div>';
-            }
-            
-            const displayLimit = 20;
-            const hasMore = stocks.length > displayLimit;
-            const uniqueId = categoryId + '_' + Math.random().toString(36).substr(2, 9);
-            
-            let html = '<div style="background: #f9fafb; border: 1px solid #e5e7eb; border-radius: 6px; padding: 10px;">';
-            
-            // 最初の20銘柄を表示
-            html += '<div class="stock-list" style="font-size: 13px; line-height: 1.8;">';
-            for (let i = 0; i < Math.min(displayLimit, stocks.length); i++) {
-                const stock = stocks[i];
-                html += `<div style="padding: 2px 0;">${stock.code} ${stock.company_name}</div>`;
-            }
-            html += '</div>';
-            
-            // 残りの銘柄（非表示）
-            if (hasMore) {
-                html += `<div id="${uniqueId}_hidden" style="display: none; font-size: 13px; line-height: 1.8; margin-top: 5px; border-top: 1px solid #e5e7eb; padding-top: 10px;">`;
-                for (let i = displayLimit; i < stocks.length; i++) {
-                    const stock = stocks[i];
-                    html += `<div style="padding: 2px 0;">${stock.code} ${stock.company_name}</div>`;
-                }
-                html += '</div>';
-                
-                // もっと見るボタン
-                html += `<button id="${uniqueId}_btn" onclick="toggleCategoryStocks('${uniqueId}')" style="margin-top: 10px; padding: 6px 12px; background: #3b82f6; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; width: 100%;">`;
-                html += `もっと見る (残り${stocks.length - displayLimit}銘柄)`;
-                html += '</button>';
-            }
-            
-            html += '</div>';
-            return html;
-        }
-        
-        // カテゴリ別アコーディオン切り替え関数
-        function toggleCategoryStocks(uniqueId) {
-            const hiddenDiv = document.getElementById(uniqueId + '_hidden');
-            const button = document.getElementById(uniqueId + '_btn');
-            
-            if (!hiddenDiv || !button) return;
-            
-            const isHidden = hiddenDiv.style.display === 'none';
-            
-            if (isHidden) {
-                hiddenDiv.style.display = 'block';
-                button.textContent = '閉じる';
-            } else {
-                hiddenDiv.style.display = 'none';
-                const totalStocks = hiddenDiv.querySelectorAll('div').length;
-                button.textContent = `もっと見る (残り${totalStocks}銘柄)`;
-            }
-        }
-        
-        // アコーディオン機能: 非表示銘柄を展開/折りたたみ
-        function toggleHiddenRows() {
-            const hiddenRows = document.querySelectorAll('.hidden-rows');
-            const button = document.querySelector('.show-more-button');
-            
-            if (hiddenRows.length === 0) return;
-            
-            const isHidden = hiddenRows[0].style.display === 'none' || hiddenRows[0].style.display === '';
-            
-            hiddenRows.forEach(row => {
-                row.style.display = isHidden ? 'table-row' : 'none';
-            });
-            
-            if (button) {
-                if (isHidden) {
-                    button.textContent = '閉じる';
-                } else {
-                    const totalRows = document.querySelectorAll('tbody tr').length;
-                    const visibleRows = 20;
-                    button.textContent = `もっと見る (残り${totalRows - visibleRows}銘柄)`;
-                }
             }
         }
     </script>
