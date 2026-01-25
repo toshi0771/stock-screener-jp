@@ -644,8 +644,21 @@ class StockScreener:
         
         try:
             # 株価データ取得（200SMA用に追加データ取得）
+            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=300)  # 200SMA計算のため十分なデータを確保
+            # 休場日の場合、前営業日に調整（土日・祝日対応）
+            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
+                end_date = end_date - timedelta(days=1)
+            # 祝日チェック（J-Quants API使用）
+            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            while not is_trading:
+                end_date = end_date - timedelta(days=1)
+                # 週末をスキップ
+                while end_date.weekday() >= 5:
+                    end_date = end_date - timedelta(days=1)
+                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            
+            start_date = end_date - timedelta(days=400)  # 200SMA計算のため十分なデータを確保
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
@@ -722,8 +735,21 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
+            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=150)  # 最適化: 260→150日
+            # 休場日の場合、前営業日に調整（土日・祝日対応）
+            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
+                end_date = end_date - timedelta(days=1)
+            # 祝日チェック（J-Quants API使用）
+            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            while not is_trading:
+                end_date = end_date - timedelta(days=1)
+                # 週末をスキップ
+                while end_date.weekday() >= 5:
+                    end_date = end_date - timedelta(days=1)
+                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            
+            start_date = end_date - timedelta(days=300)  # 200日新高値確認のため300日
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
@@ -817,12 +843,21 @@ class StockScreener:
             logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
         
         try:
-            # 日本時間で現在日時を取得
-            jst = pytz.timezone('Asia/Tokyo')
-            now_jst = datetime.now(jst)
-            # 前日までのデータを取得（当日のデータはまだ確定していない可能性があるため）
-            end_date = (now_jst - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0, tzinfo=None)
-            start_date = end_date - timedelta(days=365)  # 52週（約1年）の新高値を正確に判定
+            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
+            end_date = datetime.now()
+            # 休場日の場合、前営業日に調整（土日・祝日対応）
+            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
+                end_date = end_date - timedelta(days=1)
+            # 祝日チェック（J-Quants API使用）
+            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            while not is_trading:
+                end_date = end_date - timedelta(days=1)
+                # 週末をスキップ
+                while end_date.weekday() >= 5:
+                    end_date = end_date - timedelta(days=1)
+                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            
+            start_date = end_date - timedelta(days=300)  # 200日新高値確認のため300日
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
@@ -994,8 +1029,21 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
+            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
             end_date = datetime.now()
-            start_date = end_date - timedelta(days=150)  # 100日分 + 余裕
+            # 休場日の場合、前営業日に調整（土日・祝日対応）
+            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
+                end_date = end_date - timedelta(days=1)
+            # 祝日チェック（J-Quants API使用）
+            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            while not is_trading:
+                end_date = end_date - timedelta(days=1)
+                # 週末をスキップ
+                while end_date.weekday() >= 5:
+                    end_date = end_date - timedelta(days=1)
+                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            
+            start_date = end_date - timedelta(days=200)  # 100営業日確保のため200日
             
             start_str = start_date.strftime("%Y%m%d")
             end_str = end_date.strftime("%Y%m%d")
@@ -1133,19 +1181,20 @@ class StockScreener:
         self.progress["total"] = len(stocks)
         self.progress["processed"] = 0
         self.progress["detected"] = 0
-                # 開始時のメモリ使用量をログ
+        
+        # 開始時のメモリ使用量をログ
         process = psutil.Process(os.getpid())
         mem_info = process.memory_info()
         mem_mb = mem_info.rss / 1024 / 1024
         vm = psutil.virtual_memory()
         logger.info(f"💾 {method_name} 開始時メモリ: プロセス {mem_mb:.2f}MB / システム {vm.used/1024/1024/1024:.2f}GB ({vm.percent}%)")
-
-        connector = aiohttp.TCPConnector(limit=CONCURRENT_REQUESTS)
-        timeout = aiohttp.ClientTimeout(total=30) 
         
-        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session: 
+        connector = aiohttp.TCPConnector(limit=CONCURRENT_REQUESTS)
+        timeout = aiohttp.ClientTimeout(total=30)
+        
+        async with aiohttp.ClientSession(connector=connector, timeout=timeout) as session:
             # 認証
-            await self.jq_client.authenticate(session) 
+            await self.jq_client.authenticate(session)
             
             # セマフォで同時実行数を制限
             semaphore = asyncio.Semaphore(CONCURRENT_REQUESTS)
@@ -1154,13 +1203,13 @@ class StockScreener:
                 async with semaphore:
                     result = await screening_func(stock, session)
                     self.progress["processed"] += 1
-                        
+                    
                     if self.progress["processed"] % 100 == 0:
-                       # メモリ使用量をログ
-                       mem_info = process.memory_info()
-                       mem_mb = mem_info.rss / 1024 / 1024
-                       logger.info(f"{method_name}: {self.progress['processed']}/{self.progress['total']} 処理完了 "
-                                 f"({self.progress['detected']}銘柄検出) - 💾 メモリ: {mem_mb:.2f}MB")
+                        # メモリ使用量をログ
+                        mem_info = process.memory_info()
+                        mem_mb = mem_info.rss / 1024 / 1024
+                        logger.info(f"{method_name}: {self.progress['processed']}/{self.progress['total']} 処理完了 "
+                                  f"({self.progress['detected']}銘柄検出) - 💾 メモリ: {mem_mb:.2f}MB")
                     
                     if result:
                         self.progress["detected"] += 1
@@ -1176,13 +1225,13 @@ class StockScreener:
                 result = await process_with_semaphore(stock)
                 if result:
                     results.append(result)
-                    
+            
             # 終了時のメモリ使用量をログ
             mem_info = process.memory_info()
             mem_mb = mem_info.rss / 1024 / 1024
             vm = psutil.virtual_memory()
-            logger.info(f"💾 {method_name} 終了時メモリ: プロセス {mem_mb:.2f}MB / システム {vm.used/1024/1024/1024:.2f}GB ({vm.percent}%)")            
-           
+            logger.info(f"💾 {method_name} 終了時メモリ: プロセス {mem_mb:.2f}MB / システム {vm.used/1024/1024/1024:.2f}GB ({vm.percent}%)")
+            
             # Noneを除外
             return [r for r in results if r is not None]
     
