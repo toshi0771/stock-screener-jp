@@ -171,6 +171,14 @@ class PersistentPriceCache:
                     self.hits += 1
                     logger.debug(f"キャッシュヒット: {stock_code} ({len(filtered_df)}行)")
                     return filtered_df
+                
+                # end_dt が最新データより新しい場合、start_dt以降のすべてのデータを返す
+                # （土日実行時のキャッシュミスマッチ対策）
+                filtered_df = df[df['Date'] >= start_dt].copy()
+                if len(filtered_df) > 0:
+                    self.hits += 1
+                    logger.debug(f"キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行, end_dt超過)")
+                    return filtered_df
                 else:
                     logger.debug(f"キャッシュに必要な期間のデータなし: {stock_code}")
                     self.misses += 1

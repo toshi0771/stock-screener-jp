@@ -19,6 +19,7 @@ import math
 import psutil
 from price_cache import get_cache
 from persistent_cache import PersistentPriceCache
+from trading_day_helper import get_latest_trading_day, get_date_range_for_screening
 
 # ============================================================
 # スクリーニングオプション設定
@@ -640,24 +641,11 @@ class StockScreener:
         
         try:
             # 株価データ取得（200SMA用に追加データ取得）
-            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
-            end_date = datetime.now()
-            # 休場日の場合、前営業日に調整（土日・祝日対応）
-            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
-                end_date = end_date - timedelta(days=1)
-            # 祝日チェック（J-Quants API使用）
-            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
-            while not is_trading:
-                end_date = end_date - timedelta(days=1)
-                # 週末をスキップ
-                while end_date.weekday() >= 5:
-                    end_date = end_date - timedelta(days=1)
-                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            # 最新の取引日を安全に取得（ヘルパー関数使用）
+            end_date = await get_latest_trading_day(self.jq_client, session)
             
-            start_date = end_date - timedelta(days=400)  # 200SMA計算のため十分なデータを確保
-            
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
+            # 日付範囲を取得（400日分）
+            start_str, end_str = get_date_range_for_screening(end_date, 400)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -731,24 +719,11 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
-            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
-            end_date = datetime.now()
-            # 休場日の場合、前営業日に調整（土日・祝日対応）
-            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
-                end_date = end_date - timedelta(days=1)
-            # 祝日チェック（J-Quants API使用）
-            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
-            while not is_trading:
-                end_date = end_date - timedelta(days=1)
-                # 週末をスキップ
-                while end_date.weekday() >= 5:
-                    end_date = end_date - timedelta(days=1)
-                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            # 最新の取引日を安全に取得（ヘルパー関数使用）
+            end_date = await get_latest_trading_day(self.jq_client, session)
             
-            start_date = end_date - timedelta(days=300)  # 200日新高値確認のため300日
-            
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
+            # 日付範囲を取得（300日分）
+            start_str, end_str = get_date_range_for_screening(end_date, 300)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -839,24 +814,11 @@ class StockScreener:
             logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
         
         try:
-            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
-            end_date = datetime.now()
-            # 休場日の場合、前営業日に調整（土日・祝日対応）
-            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
-                end_date = end_date - timedelta(days=1)
-            # 祝日チェック（J-Quants API使用）
-            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
-            while not is_trading:
-                end_date = end_date - timedelta(days=1)
-                # 週末をスキップ
-                while end_date.weekday() >= 5:
-                    end_date = end_date - timedelta(days=1)
-                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            # 最新の取引日を安全に取得（ヘルパー関数使用）
+            end_date = await get_latest_trading_day(self.jq_client, session)
             
-            start_date = end_date - timedelta(days=300)  # 200日新高値確認のため300日
-            
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
+            # 日付範囲を取得（300日分）
+            start_str, end_str = get_date_range_for_screening(end_date, 300)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -1025,24 +987,11 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
-            # 最新の取引日を使用（土日・祝日実行時の問題を回避）
-            end_date = datetime.now()
-            # 休場日の場合、前営業日に調整（土日・祝日対応）
-            while end_date.weekday() >= 5:  # 5=土曜, 6=日曜
-                end_date = end_date - timedelta(days=1)
-            # 祝日チェック（J-Quants API使用）
-            is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
-            while not is_trading:
-                end_date = end_date - timedelta(days=1)
-                # 週末をスキップ
-                while end_date.weekday() >= 5:
-                    end_date = end_date - timedelta(days=1)
-                is_trading = await self.jq_client.is_trading_day(session, end_date.strftime("%Y-%m-%d"))
+            # 最新の取引日を安全に取得（ヘルパー関数使用）
+            end_date = await get_latest_trading_day(self.jq_client, session)
             
-            start_date = end_date - timedelta(days=200)  # 100営業日確保のため200日
-            
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
+            # 日付範囲を取得（200日分）
+            start_str, end_str = get_date_range_for_screening(end_date, 200)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
