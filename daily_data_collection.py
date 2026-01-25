@@ -391,20 +391,16 @@ class AsyncJQuantsClient:
                     hol_div = day.get("HolDiv")
                     if hol_div:
                         if hol_div == "1":
-                            logger.info(f"✅ {date} は営業日です（HolDiv: {hol_div}）")
                             return True
                         else:
-                            logger.info(f"🚫 {date} は休場日です（HolDiv: {hol_div}）")
                             return False
                     
                     # V1 API: HolidayDivision or HD
                     holiday_division = day.get("HolidayDivision") or day.get("HD")
                     if holiday_division:
                         if holiday_division == "0":
-                            logger.info(f"✅ {date} は営業日です（HolidayDivision: {holiday_division}）")
                             return True
                         else:
-                            logger.info(f"🚫 {date} は休場日です（HolidayDivision: {holiday_division}）")
                             return False
             
             logger.warning(f"取引カレンダーに {date} のデータがありません")
