@@ -44,7 +44,7 @@ async def get_latest_trading_day(jq_client, session: aiohttp.ClientSession, base
             is_trading = await jq_client.is_trading_day(session, date_str)
             
             if is_trading:
-                logger.info(f"✅ 取引日確定: {date_str} ({['月', '火', '水', '木', '金', '土', '日'][end_date.weekday()]})")
+                logger.debug(f"✅ 取引日確定: {date_str} ({['月', '火', '水', '木', '金', '土', '日'][end_date.weekday()]})")
                 return end_date
             else:
                 logger.debug(f"  非取引日: {date_str}")

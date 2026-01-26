@@ -579,6 +579,7 @@ class StockScreener:
         self.progress = {"total": 0, "processed": 0, "detected": 0}
         self.cache = get_cache()  # メモリキャッシュインスタンス
         self.persistent_cache = PersistentPriceCache()  # 永続キャッシュインスタンス
+        self.latest_trading_date = None  # 最新の取引日（キャッシュ）
     
     def calculate_ema(self, series, period):
         """EMAを計算"""
@@ -639,10 +640,24 @@ class StockScreener:
         # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
+        # 統計情報を初期化（初回のみ）
+        if not hasattr(self, 'perfect_order_stats'):
+            self.perfect_order_stats = {
+                "total": 0,
+                "has_data": 0,
+                "data_insufficient": 0,
+                "passed_perfect_order": 0,
+                "passed_divergence": 0,
+                "passed_sma200": 0,
+                "final_detected": 0
+            }
+        
+        self.perfect_order_stats["total"] += 1
+        
         try:
             # 株価データ取得（200SMA用に追加データ取得）
-            # 最新の取引日を安全に取得（ヘルパー関数使用）
-            end_date = await get_latest_trading_day(self.jq_client, session)
+            # キャッシュされた最新の取引日を使用
+            end_date = self.latest_trading_date
             
             # 日付範囲を取得（400日分）
             start_str, end_str = get_date_range_for_screening(end_date, 400)
@@ -661,7 +676,14 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 200:
+            if df is None:
+                return None
+            
+            self.perfect_order_stats["has_data"] += 1
+            
+            if len(df) < 200:
+                self.perfect_order_stats["data_insufficient"] += 1
+                logger.debug(f"[{code}] データ不足: {len(df)}行 < 200行")
                 return None
             
             # EMA計算
@@ -675,23 +697,35 @@ class StockScreener:
             latest = df.iloc[-1]
             
             # パーフェクトオーダー判定
-            if not (latest['Close'] >= latest['EMA10'] >= 
-                    latest['EMA20'] >= latest['EMA50']):
+            perfect_order_check = (latest['Close'] >= latest['EMA10'] >= 
+                                   latest['EMA20'] >= latest['EMA50'])
+            if not perfect_order_check:
+                logger.debug(f"[{code}] パーフェクトオーダー不成立: Close={latest['Close']:.2f}, EMA10={latest['EMA10']:.2f}, EMA20={latest['EMA20']:.2f}, EMA50={latest['EMA50']:.2f}")
                 return None
+            
+            self.perfect_order_stats["passed_perfect_order"] += 1
             
             # 乖離率フィルター: (株価 - 50EMA) / 株価 <= 20%
             divergence_pct = ((latest['Close'] - latest['EMA50']) / latest['Close']) * 100
             if divergence_pct > 20:
+                logger.debug(f"[{code}] 乖離率超過: {divergence_pct:.2f}% > 20%")
                 return None
+            
+            self.perfect_order_stats["passed_divergence"] += 1
             
             # 200SMAフィルター適用
             if PERFECT_ORDER_SMA200_FILTER == "above":
                 if latest['Close'] < latest['SMA200']:
+                    logger.debug(f"[{code}] 200SMAフィルター除外: Close={latest['Close']:.2f} < SMA200={latest['SMA200']:.2f}")
                     return None
             elif PERFECT_ORDER_SMA200_FILTER == "below":
                 if latest['Close'] > latest['SMA200']:
+                    logger.debug(f"[{code}] 200SMAフィルター除外: Close={latest['Close']:.2f} > SMA200={latest['SMA200']:.2f}")
                     return None
             # "all"の場合はフィルターなし
+            
+            self.perfect_order_stats["passed_sma200"] += 1
+            self.perfect_order_stats["final_detected"] += 1
             
             return {
                 "code": code,
@@ -719,8 +753,8 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
-            # 最新の取引日を安全に取得（ヘルパー関数使用）
-            end_date = await get_latest_trading_day(self.jq_client, session)
+            # キャッシュされた最新の取引日を使用
+            end_date = self.latest_trading_date
             
             # 日付範囲を取得（300日分）
             start_str, end_str = get_date_range_for_screening(end_date, 300)
@@ -814,8 +848,8 @@ class StockScreener:
             logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
         
         try:
-            # 最新の取引日を安全に取得（ヘルパー関数使用）
-            end_date = await get_latest_trading_day(self.jq_client, session)
+            # キャッシュされた最新の取引日を使用
+            end_date = self.latest_trading_date
             
             # 日付範囲を取得（300日分）
             start_str, end_str = get_date_range_for_screening(end_date, 300)
@@ -987,8 +1021,8 @@ class StockScreener:
         market = stock.get("Mkt", stock.get("MarketCode", ""))
         
         try:
-            # 最新の取引日を安全に取得（ヘルパー関数使用）
-            end_date = await get_latest_trading_day(self.jq_client, session)
+            # キャッシュされた最新の取引日を使用
+            end_date = self.latest_trading_date
             
             # 日付範囲を取得（200日分）
             start_str, end_str = get_date_range_for_screening(end_date, 200)
@@ -1201,6 +1235,37 @@ class StockScreener:
         )
         po_time = int((datetime.now() - po_start).total_seconds() * 1000)
         logger.info(f"パーフェクトオーダー検出: {len(perfect_order)}銘柄 ({po_time}ms)")
+        
+        # 統計情報を表示
+        if hasattr(self, 'perfect_order_stats'):
+            stats = self.perfect_order_stats
+            logger.info("📊 パーフェクトオーダースクリーニング 詳細統計")
+            logger.info("="*60)
+            logger.info(f"📄 処理対象: {stats['total']:,}銘柄")
+            
+            if stats['total'] > 0:
+                logger.info(f"✅ データ取得成功: {stats['has_data']:,}銘柄 ({stats['has_data']/stats['total']*100:.1f}%)")
+                logger.info(f"❌ データ不足: {stats['data_insufficient']:,}銘柄 ({stats['data_insufficient']/stats['total']*100:.1f}%)")
+            
+            logger.info(f"\n🔹 条件別通過状況:")
+            
+            if stats['has_data'] > 0:
+                logger.info(f"  1️⃣ パーフェクトオーダー成立: {stats['passed_perfect_order']:,}銘柄 ({stats['passed_perfect_order']/stats['has_data']*100:.2f}%)")
+            else:
+                logger.info(f"  1️⃣ パーフェクトオーダー成立: {stats['passed_perfect_order']:,}銘柄")
+            
+            if stats['passed_perfect_order'] > 0:
+                logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 ({stats['passed_divergence']/stats['passed_perfect_order']*100:.2f}% of 条件1通過)")
+            else:
+                logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 (条件1通過が0のため計算不可)")
+            
+            if stats['passed_divergence'] > 0:
+                logger.info(f"  3️⃣ 200SMAフィルター通過: {stats['passed_sma200']:,}銘柄 ({stats['passed_sma200']/stats['passed_divergence']*100:.2f}% of 条件2通過)")
+            else:
+                logger.info(f"  3️⃣ 200SMAフィルター通過: {stats['passed_sma200']:,}銘柄 (条件2通過が0のため計算不可)")
+            
+            logger.info(f"\n⭐ 全条件通過: {stats['final_detected']:,}銘柄")
+            logger.info("="*60 + "\n")
         
         # 間引き処理
         perfect_order_sampled = sample_stocks_balanced(perfect_order, max_per_range=10)
@@ -1472,7 +1537,11 @@ async def main():
                 logger.info("=" * 60)
                 return 0
             
-            logger.info("✅ 本日は営業日です。スクリーニングを開始します")
+            # 最新の取引日を取得してキャッシュ（1回だけ）
+            from trading_day_helper import get_latest_trading_day
+            base_date = datetime.strptime(today, '%Y-%m-%d')
+            screener.latest_trading_date = await get_latest_trading_day(screener.jq_client, session, base_date)
+            logger.info(f"✅ 取引日確定: {screener.latest_trading_date.strftime('%Y-%m-%d')} ({['月', '火', '水', '木', '金', '土', '日'][screener.latest_trading_date.weekday()]})")
             logger.info("=" * 60)
             
             # 銘柄リスト取得
