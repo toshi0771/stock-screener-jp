@@ -1032,3 +1032,65 @@ elif PERFECT_ORDER_SMA200_FILTER == "below":
 - 修正案Dの永続キャッシュバグ修正と併用することで、最大の効果を発揮
 - 200SMAフィルターは完全削除されたため、過去データも200SMA分岐なしで表示される
 - 今後、200SMAフィルターを再度追加する場合は、フロントエンド・バックエンド両方の修正が必要
+
+
+---
+
+## 🧹 修正案F: ファイル整理と不要コード削除（2026-01-27実装）
+
+### 背景
+
+ユーザーからの指摘により、リポジトリ内に旧バージョンのファイルや重複したドキュメントが混在していることが判明。コードの可読性とメンテナンス性を向上させるため、ファイル整理を実施。
+
+### 実施した修正
+
+#### 1. week52.py系ファイルの削除
+
+- **削除対象:**
+  - `week52_high_detector.py`
+  - `test_52week_detection.py`
+- **理由:** 旧52週新高値検出モジュール。現在の実装は`daily_data_collection.py`の`screen_200day_pullback()`メソッドに統合済み。
+
+#### 2. 旧スクリーニングエンジンの削除
+
+- **削除対象:**
+  - `pullback_screener.py`
+  - `ema_touch_detector.py`
+  - `stochastic_detector.py`
+- **理由:** 旧`app_enhanced.py`でのみ使用されていたスクリーニングエンジン。現在は不要。
+
+#### 3. 旧Flaskアプリの削除
+
+- **削除対象:** `app_enhanced.py`
+- **理由:** 旧バージョンのFlaskアプリケーション。現在のエントリーポイントは`app.py`。
+
+#### 4. READMEの統合
+
+- **作業内容:** `README_FINAL.md`の内容を`README.md`に上書きし、`README_FINAL.md`を削除。
+- **理由:** ドキュメントの重複を解消し、情報を一元化。
+
+#### 5. requirements.txtの確認
+
+- **調査結果:** `trequuirements.txt`というtypoファイルは存在せず、`requirements.txt`のみ存在。
+- **対応:** 作業不要。
+
+### 削除したファイル一覧
+
+1. `app_enhanced.py`
+2. `pullback_screener.py`
+3. `week52_high_detector.py`
+4. `test_52week_detection.py`
+5. `ema_touch_detector.py`
+6. `stochastic_detector.py`
+7. `README_FINAL.md`
+
+### コミット情報
+
+- **コミット:** e2063b8
+- **タイトル:** Cleanup: Remove obsolete files and unify documentation
+
+### 期待される効果
+
+- **コードベースの簡素化:** 不要なファイルが削除され、プロジェクト構造が明確に。
+- **メンテナンス性向上:** 旧バージョンのコードがなくなったことで、混乱を防止。
+- **ドキュメントの一元化:** READMEが最新の状態に保たれる。
