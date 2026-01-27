@@ -1,162 +1,184 @@
-# 株式スクリーニング 日次データ収集システム
+# 株式スクリーニングWebアプリケーション - 最終版
 
 ## 概要
 
-東証終了後に自動実行される日次株式スクリーニングデータ収集システムです。3つのスクリーニング手法で銘柄を検出し、過去90日分の履歴を管理します。
+日本株の3つのスクリーニング手法を実装したWebアプリケーションです。Supabaseから実際のスクリーニング結果を取得して表示します。
 
-## 機能
+## 主な機能
 
-### スクリーニング手法
+### 1. パーフェクトオーダー検出
+- 条件: 株価 >= 10EMA >= 20EMA >= 50EMA
+- オプション:
+  - 市場選択（全て/プライム/スタンダード/グロース）
+  - 200SMAフィルター（全て/200SMAより上/200SMAより下）
 
-1. **パーフェクトオーダー**
-   - 条件: 株価 ≥ 10EMA ≥ 20EMA ≥ 50EMA
-   - 上昇トレンドの強い銘柄を検出
+### 2. ボリンジャーバンド±3σタッチ検出
+- 条件: 株価が±3σにタッチ
+- オプション:
+  - 市場選択（全て/プライム/スタンダード/グロース）
 
-2. **ボリンジャーバンド±3σ**
-   - 条件: 株価がボリンジャーバンドの±3σに到達
-   - 買われすぎ/売られすぎの銘柄を検出
+### 3. 52週新高値押し目検出
+- 条件: 52週新高値達成後、10EMA/20EMA/50EMAにタッチ
+- オプション:
+  - 市場選択（全て/プライム/スタンダード/グロース）
+  - ストキャス売られすぎフィルター（ON/OFF）
 
-3. **52週新高値押し目**
-   - 条件: 52週新高値達成後、10EMA/20EMA/50EMAにタッチ
-   - 押し目買いのチャンスを検出
-
-### データ管理
-
-- **履歴保存**: JSON形式で過去90日分のデータを保持
-- **ログ記録**: 日次実行ログを自動生成
-- **統計情報**: 平均検出数などの統計を自動計算
-
-## ディレクトリ構成
+## ファイル構成
 
 ```
 stock_screener_enhanced/
-├── daily_data_collection.py    # メインスクリプト
-├── data/
-│   └── screening_history.json  # 履歴データ(過去90日分)
-├── logs/
-│   └── daily_collection_YYYYMMDD.log  # 実行ログ
-└── README.md                    # このファイル
+├── app.py                          # メインアプリケーション（実データ連携版）
+├── daily_data_collection.py       # 日次データ収集スクリプト
+├── templates/
+│   └── index_market_filter.html   # HTMLテンプレート（市場選択機能付き）
+├── .env                            # 環境変数（Supabase認証情報）
+├── requirements.txt                # Pythonパッケージリスト
+└── README_FINAL.md                 # このファイル
 ```
 
-## 使用方法
+## セットアップ手順
 
-### 手動実行
+### 1. 必要なパッケージのインストール
 
 ```bash
-cd /home/ubuntu/stock_screener_enhanced
+pip3 install flask supabase python-dotenv pandas numpy jquants-api-client
+```
+
+### 2. 環境変数の設定
+
+`.env`ファイルに以下の情報を設定してください：
+
+```
+SUPABASE_URL=https://your-project.supabase.co
+SUPABASE_ANON_KEY=your-anon-key
+JQUANTS_REFRESH_TOKEN=your-refresh-token
+```
+
+### 3. アプリケーションの起動
+
+```bash
+python3 app.py
+```
+
+アクセスURL: http://localhost:5000
+
+## 日次データ収集
+
+毎営業日15:30に自動実行されるCron設定済み：
+
+```bash
+# Cronジョブ確認
+crontab -l
+
+# 手動実行
 python3 daily_data_collection.py
 ```
 
-### 自動実行(cron設定例)
+実行結果はSupabaseに自動保存されます。
 
-東証終了後の15:30に自動実行:
+## データベース構造
 
-```bash
-30 15 * * 1-5 cd /home/ubuntu/stock_screener_enhanced && python3 daily_data_collection.py
-```
+### screening_results テーブル
+- スクリーニング実行結果の概要情報
+- フィールド: screening_type, screening_date, market_filter, total_stocks_found など
 
-## jQuants API設定
+### detected_stocks テーブル
+- 検出された個別銘柄の詳細情報
+- フィールド: stock_code, company_name, market, close_price, volume, EMA/SMA値 など
 
-実際の株価データを取得するには、jQuants APIキーが必要です。
+## API エンドポイント
 
-### 環境変数設定
+### POST /api/screening
+スクリーニング実行
 
-```bash
-export JQUANTS_REFRESH_TOKEN="your_refresh_token_here"
-```
-
-または、`.env`ファイルに記載:
-
-```
-JQUANTS_REFRESH_TOKEN=your_refresh_token_here
-```
-
-### APIキー未設定時の動作
-
-APIキーが設定されていない場合、ダミーデータを生成してスクリプトは正常に動作します。
-
-## 出力データ形式
-
-### screening_history.json
-
+**リクエスト例:**
 ```json
 {
-  "2025-10-18": {
-    "date": "2025-10-18",
-    "timestamp": "2025-10-18T07:52:21.389469",
-    "total_stocks": 15,
-    "perfect_order": [
-      {
-        "code": "7203",
-        "name": "銘柄7203",
-        "price": 2242.74,
-        "ema10": 1444.8,
-        "ema20": 2045.47,
-        "ema50": 2102.52,
-        "market": "Prime"
-      }
-    ],
-    "bollinger_band": [...],
-    "52week_pullback": [...]
+  "method": "perfect_order",
+  "options": {
+    "market": "all",
+    "sma200_filter": "all"
   }
 }
 ```
 
-## 技術仕様
+**レスポンス例:**
+```json
+{
+  "success": true,
+  "count": 3,
+  "results": [
+    {
+      "code": "96720",
+      "name": "東京都競馬",
+      "market": "プライム",
+      "price": 5620.0,
+      "volume": 56800,
+      "ema10": 5534.47,
+      "ema20": 5457.08,
+      "ema50": 5296.42
+    }
+  ]
+}
+```
 
-- **言語**: Python 3.11
-- **データソース**: jQuants API
-- **データ処理**: pandas, numpy
-- **ファイル形式**: JSON (UTF-8)
-- **ログ形式**: テキスト (UTF-8)
+### GET /api/health
+ヘルスチェック
 
-## パフォーマンス
+## ロリポップサーバーへのデプロイ
 
-- **処理速度**: 約4,000銘柄を数秒で処理
-- **メモリ使用**: 最適化されたデータ構造
-- **ファイルサイズ**: 90日分で約5-10MB
+### 1. ファイルのアップロード
+- FTPまたはSSHでファイルをアップロード
+- `.env`ファイルも忘れずにアップロード
+
+### 2. Pythonバージョン確認
+```bash
+python3 --version
+```
+
+### 3. パッケージインストール
+```bash
+pip3 install --user flask supabase python-dotenv pandas numpy
+```
+
+### 4. アプリケーション起動
+```bash
+# 開発サーバー（テスト用）
+python3 app.py
+
+# 本番環境（Gunicorn推奨）
+gunicorn -w 4 -b 0.0.0.0:5000 app:app
+```
 
 ## トラブルシューティング
 
-### ファイルパスエラー
+### データが取得できない場合
+1. Supabase接続を確認: `/api/health` にアクセス
+2. `.env`ファイルの認証情報を確認
+3. Supabaseのテーブルにデータが存在するか確認
 
-すべてのファイルパスは絶対パスで指定されています:
-- BASE_DIR: `/home/ubuntu/stock_screener_enhanced`
-- DATA_DIR: `/home/ubuntu/stock_screener_enhanced/data`
-- LOG_DIR: `/home/ubuntu/stock_screener_enhanced/logs`
-
-### API認証エラー
-
-jQuants APIキーが正しく設定されているか確認してください:
-
+### Cronが実行されない場合
 ```bash
-echo $JQUANTS_REFRESH_TOKEN
+# Cronログ確認
+tail -f /var/log/cron
+
+# 手動実行でテスト
+python3 daily_data_collection.py
 ```
 
-### 履歴データの確認
+## 技術スタック
 
-```bash
-cat /home/ubuntu/stock_screener_enhanced/data/screening_history.json | python3 -m json.tool
-```
+- **バックエンド**: Flask (Python)
+- **データベース**: Supabase (PostgreSQL)
+- **データソース**: jQuants API
+- **フロントエンド**: HTML/CSS/JavaScript
+- **デプロイ**: ロリポップサーバー（予定）
 
-## 今後の拡張予定
+## 作成日
 
-1. **Supabase連携**: データベースへの自動保存
-2. **バックテスト機能**: 過去データでの戦略検証
-3. **アラート機能**: 条件達成時の通知
-4. **Webダッシュボード**: 可視化インターフェース
+2025年10月21日
 
 ## バージョン
 
-- **Version**: 1.0.0
-- **作成日**: 2025年10月18日
-- **最終更新**: 2025年10月18日
-
-## ライセンス
-
-Private Use Only
-
-## 開発者
-
-Manus AI Agent
+v2.0 - 市場選択機能付き実データ連携版
 
