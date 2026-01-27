@@ -131,8 +131,14 @@ class SupabaseClient:
             return False
         
         if not stocks or len(stocks) == 0:
-            logger.warning("保存する銘柄がありません")
-            return False
+            logger.warning("保存する銘柄がありません（0銘柄）")
+            # 0銘柄の場合も、screening_result_idに紐づく古いデータを削除
+            try:
+                self.client.table("detected_stocks").delete().eq("screening_result_id", screening_result_id).execute()
+                logger.info(f"古いdetected_stocksデータを削除しました (screening_result_id={screening_result_id})")
+            except Exception as e:
+                logger.error(f"古いデータ削除エラー: {e}")
+            return True  # 0銘柄でも成功とみなす
         
         try:
             # バッチ用データリストを作成
