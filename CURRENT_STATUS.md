@@ -445,3 +445,230 @@ if (latestResult && latestResult.total_stocks_found > 0) {
 - `SUPABASE_DISCREPANCY_ANALYSIS.md` - GitHubとSupabaseの差異の詳細分析
 
 ---
+
+
+## 🎉 修正案AとBの実装完了（2026年1月27日）
+
+### ✅ 修正案A: 最新取引日の取得改善
+
+**コミット:** 93a1bf7  
+**実装日時:** 2026年1月27日
+
+#### 問題点
+
+- 検出銘柄が0の場合、`if`ブロックがスキップされ、`target_date`が更新されない
+- Supabase保存時に誤った日付が使用される可能性
+
+#### 解決策
+
+`StockScreener`クラスに`get_latest_trading_date()`メソッドを追加し、4つの実行スクリプトすべてで使用。
+
+**追加したメソッド（`daily_data_collection.py` Line 584-587）:**
+
+```python
+async def get_latest_trading_date(self):
+    """最新の取引日を取得（検出銘柄の有無に関わらず）"""
+    from trading_day_helper import get_latest_trading_day
+    return get_latest_trading_day()
+```
+
+#### 変更ファイル
+
+1. `daily_data_collection.py` - 新しいメソッドを追加
+2. `run_perfect_order.py` - 21行 → 3行（18行削減）
+3. `run_bollinger_band.py` - 22行 → 3行（19行削減）
+4. `run_200day_pullback.py` - 21行 → 3行（18行削減）
+5. `run_squeeze.py` - 20行 → 3行（17行削減）
+
+**合計:** 81行削減、コード重複を4箇所から1箇所に統一
+
+#### 変更例（`run_perfect_order.py`）
+
+**変更前（21行）:**
+
+```python
+# 最新取引日を取得（検出された銘柄から）
+if perfect_order:
+    first_stock = perfect_order[0]
+    code = first_stock["code"]
+    end_date = datetime.now()
+    start_date = end_date - timedelta(days=10)
+    start_str = start_date.strftime("%Y%m%d")
+    end_str = end_date.strftime("%Y%m%d")
+    
+    import aiohttp
+    async with aiohttp.ClientSession() as session:
+        df = await screener.cache.get_or_fetch(
+            code, start_str, end_str,
+            screener.jq_client.get_prices_daily_quotes,
+            session, code, start_str, end_str
+        )
+        if df is not None and len(df) > 0:
+            latest_date = df.iloc[-1]['Date']
+            target_date = pd.to_datetime(latest_date).strftime('%Y-%m-%d')
+            logger.info(f"📅 最新取引日: {target_date}")
+```
+
+**変更後（3行）:**
+
+```python
+# 最新取引日を取得（検出銘柄の有無に関わらず）
+target_date = await screener.get_latest_trading_date()
+logger.info(f"📅 最新取引日: {target_date}")
+```
+
+#### 期待される効果
+
+1. ✅ 検出銘柄の有無に関わらず、正しい取引日を取得
+2. ✅ Supabaseに正しい日付で保存
+3. ✅ コード重複を削減（保守性向上）
+4. ✅ GitHubとSupabaseの差異を解消（部分的）
+
+---
+
+### ✅ 修正案B: 0銘柄時に古いデータを削除
+
+**コミット:** 253bc33  
+**実装日時:** 2026年1月27日
+
+#### 問題点
+
+- 0銘柄検出時、`detected_stocks`テーブルに何も保存されない
+- `screening_results`テーブルには`total_stocks_found=0`が保存される
+- 古い`detected_stocks`データが削除されない
+- フロントエンドが古いデータを表示し続ける
+
+#### 解決策
+
+`save_detected_stocks()`メソッドを修正し、0銘柄時に`screening_result_id`に紐づく古いデータを削除。
+
+**変更箇所（`daily_data_collection.py` Line 133-141）:**
+
+**変更前:**
+
+```python
+if not stocks or len(stocks) == 0:
+    logger.warning("保存する銘柄がありません")
+    return False
+```
+
+**変更後:**
+
+```python
+if not stocks or len(stocks) == 0:
+    logger.warning("保存する銘柄がありません（0銘柄）")
+    # 0銘柄の場合も、screening_result_idに紐づく古いデータを削除
+    try:
+        self.client.table("detected_stocks").delete().eq("screening_result_id", screening_result_id).execute()
+        logger.info(f"古いdetected_stocksデータを削除しました (screening_result_id={screening_result_id})")
+    except Exception as e:
+        logger.error(f"古いデータ削除エラー: {e}")
+    return True  # 0銘柄でも成功とみなす
+```
+
+#### データ削除のロジック
+
+```python
+self.client.table("detected_stocks").delete().eq("screening_result_id", screening_result_id).execute()
+```
+
+**SQL相当:**
+
+```sql
+DELETE FROM detected_stocks
+WHERE screening_result_id = {screening_result_id};
+```
+
+#### 期待される効果
+
+1. ✅ 0銘柄検出時、古いデータが自動削除される
+2. ✅ フロントエンドが最新の実行結果（0銘柄）を表示
+3. ✅ GitHubとSupabaseの差異が完全に解消される
+4. ✅ 戻り値が`True`になり、呼び出し元で「保存成功」として扱われる
+
+---
+
+### 🎯 修正案AとBの組み合わせ効果
+
+#### 修正前の動作フロー
+
+1. パーフェクトオーダーで0銘柄検出
+2. `if perfect_order:`が`False` → `target_date`が更新されない
+3. `screening_results`テーブルに誤った日付で保存される可能性
+4. `save_detected_stocks()`が`return False` → 何も保存されない
+5. 古いデータ（74銘柄）が残る
+6. フロントエンドが古いデータを表示
+
+#### 修正後の動作フロー
+
+1. パーフェクトオーダーで0銘柄検出
+2. `get_latest_trading_date()`で正しい取引日を取得（修正案A）
+3. `screening_results`テーブルに正しい日付で保存
+4. `save_detected_stocks()`が古いデータを削除（修正案B）
+5. `return True`で成功として扱われる
+6. フロントエンドが最新の実行結果（0銘柄）を表示
+
+---
+
+### 📊 実装統計
+
+| 項目 | 修正案A | 修正案B | 合計 |
+|---|---|---|---|
+| 変更ファイル数 | 5ファイル | 1ファイル | 5ファイル |
+| 追加行数 | 17行 | 8行 | 25行 |
+| 削除行数 | 81行 | 2行 | 83行 |
+| 純削減 | 64行 | -6行 | 58行 |
+| コミット | 93a1bf7 | 253bc33 | 2コミット |
+
+---
+
+### 🧪 検証方法
+
+#### 1. GitHub Actionsで再実行
+
+1. https://github.com/toshi0771/stock-screener-jp/actions にアクセス
+2. 各ワークフローを手動実行
+3. ログを確認:
+   - ✅ 「📅 最新取引日: YYYY-MM-DD」が1回だけ出力される
+   - ✅ 「保存する銘柄がありません（0銘柄）」が出力される
+   - ✅ 「古いdetected_stocksデータを削除しました (screening_result_id=XXX)」が出力される
+   - ✅ エラーログがない
+
+#### 2. Supabaseの表示を確認
+
+1. Supabaseのフロントエンドにアクセス
+2. 各スクリーニングの最新データを確認:
+   - ✅ パーフェクトオーダー: 最新日のデータが表示される（0銘柄）
+   - ✅ 200日新高値押し目: 最新日のデータが表示される（0銘柄）
+   - ✅ ボリンジャーバンド: 最新日のデータが表示される
+   - ✅ スクイーズ: 最新日のデータが表示される（0銘柄）
+
+#### 3. 古いデータの削除を確認
+
+1. Supabaseのダッシュボードにアクセス
+2. `detected_stocks`テーブルを確認
+3. パーフェクトオーダーの74銘柄（1月20日など）が削除されていることを確認
+
+---
+
+### 📁 作成したドキュメント
+
+- `FIX_A_IMPLEMENTATION_REPORT.md` - 修正案Aの詳細実装レポート
+- `FIX_B_IMPLEMENTATION_REPORT.md` - 修正案Bの詳細実装レポート
+
+---
+
+### ✅ 実装完了ステータス
+
+| 修正案 | ステータス | コミット | 実装日時 |
+|---|---|---|---|
+| 修正案A: 最新取引日の取得改善 | ✅ 完了 | 93a1bf7 | 2026-01-27 |
+| 修正案B: 0銘柄時に古いデータを削除 | ✅ 完了 | 253bc33 | 2026-01-27 |
+| 修正案C: フロントエンドのクエリ修正 | ⏸️ 保留 | - | - |
+
+**修正案C（保留理由）:**
+- 修正案AとBで問題が解決される見込み
+- フロントエンドのクエリは現状のままで問題ない
+- 必要に応じて将来実装
+
+---
