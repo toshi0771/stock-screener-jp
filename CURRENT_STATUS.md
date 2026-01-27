@@ -672,3 +672,143 @@ WHERE screening_result_id = {screening_result_id};
 - 必要に応じて将来実装
 
 ---
+
+
+## 🚨 緊急修正: 修正案A実装時のバグ（2026年1月27日）
+
+### エラー内容
+
+**発生日時:** 2026年1月27日（日次実行）  
+**影響範囲:** 4つのスクリーニングメソッドすべて（Perfect Order, Bollinger Band, 200-Day Pullback, Squeeze）
+
+**エラーメッセージ:**
+```
+ERROR - エラーが発生しました: get_latest_trading_day() missing 2 required positional arguments: 'jq_client' and 'session'
+```
+
+**スタックトレース:**
+```
+File "/home/runner/work/stock-screener-jp/stock-screener-jp/run_bollinger_band.py", line 64, in main
+    target_date = await screener.get_latest_trading_date()
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+File "/home/runner/work/stock-screener-jp/stock-screener-jp/daily_data_collection.py", line 593, in get_latest_trading_date
+    return get_latest_trading_day()
+           ^^^^^^^^^^^^^^^^^^^^^^^^
+TypeError: get_latest_trading_day() missing 2 required positional arguments: 'jq_client' and 'session'
+```
+
+---
+
+### 根本原因
+
+**修正案A実装時のミス:**
+
+`StockScreener.get_latest_trading_date()`メソッド（Line 590-593）で、`get_latest_trading_day()`を引数なしで呼び出していた。
+
+**問題のコード（修正前）:**
+```python
+async def get_latest_trading_date(self):
+    """最新の取引日を取得（検出銘柄の有無に関わらず）"""
+    from trading_day_helper import get_latest_trading_day
+    return get_latest_trading_day()  # ❌ 引数が不足
+```
+
+**`get_latest_trading_day()`の正しいシグネチャ:**
+```python
+async def get_latest_trading_day(jq_client, session: aiohttp.ClientSession, base_date: datetime = None) -> datetime:
+```
+
+**必要な引数:**
+1. `jq_client` - J-Quants クライアント
+2. `session` - aiohttp セッション
+3. `base_date` - 基準日（オプション）
+
+---
+
+### 修正内容
+
+**コミット:** bc99683  
+**修正日時:** 2026年1月27日
+
+**修正後のコード（Line 590-597）:**
+```python
+async def get_latest_trading_date(self):
+    """最新の取引日を取得（検出銘柄の有無に関わらず）"""
+    from trading_day_helper import get_latest_trading_day
+    import aiohttp
+    
+    async with aiohttp.ClientSession() as session:
+        latest_date = await get_latest_trading_day(self.jq_client, session)
+        return latest_date.strftime('%Y-%m-%d')
+```
+
+**変更点:**
+1. ✅ `aiohttp.ClientSession`を作成
+2. ✅ `self.jq_client`と`session`を引数として渡す
+3. ✅ `await`で非同期呼び出しを待機
+4. ✅ `datetime`オブジェクトを文字列形式（YYYY-MM-DD）に変換
+
+---
+
+### 影響範囲
+
+**修正前（エラー発生）:**
+- ❌ Perfect Order: エラーで停止
+- ❌ Bollinger Band: エラーで停止
+- ❌ 200-Day Pullback: エラーで停止
+- ❌ Squeeze: エラーで停止
+
+**修正後（期待される動作）:**
+- ✅ Perfect Order: 正常実行
+- ✅ Bollinger Band: 正常実行
+- ✅ 200-Day Pullback: 正常実行
+- ✅ Squeeze: 正常実行
+
+---
+
+### テスト結果
+
+**構文チェック:**
+```bash
+$ python3 -m py_compile daily_data_collection.py
+✅ エラーなし
+```
+
+**GitHubへのプッシュ:**
+```
+✅ コミット bc99683 がmainブランチにプッシュされました
+```
+
+---
+
+### 次のアクション
+
+1. **GitHub Actionsで再実行**
+   - 4つのワークフローすべてを手動実行
+   - エラーが解消されていることを確認
+
+2. **ログの確認**
+   - ✅ 「📅 最新取引日: YYYY-MM-DD」が1回だけ出力される
+   - ✅ エラーログがない
+   - ✅ スクリーニングが正常に完了する
+
+3. **Supabaseの確認**
+   - 最新のデータが正しく保存されている
+   - 0銘柄の場合も古いデータが削除されている
+
+---
+
+### 教訓
+
+**修正案A実装時の問題点:**
+- `get_latest_trading_day()`の関数シグネチャを確認せずに実装
+- 非同期関数の呼び出しに`await`を使用していなかった
+- ローカルテストを実施せずにコミット
+
+**今後の改善策:**
+1. ✅ 関数シグネチャを必ず確認する
+2. ✅ 非同期関数は`await`で呼び出す
+3. ✅ コミット前に構文チェックを実施する
+4. ✅ 可能な限りローカルテストを実施する
+
+---
