@@ -135,13 +135,25 @@ class PersistentPriceCache:
             キャッシュされたDataFrame（指定期間のみ）、なければNone
         """
         cache_path = self._get_cache_path(stock_code)
+        
+        # デバッグログ: 取得開始
+        logger.debug(f"🔍 キャッシュ取得開始: {stock_code}")
+        logger.debug(f"  start_date: {start_date}, end_date: {end_date}")
+        logger.debug(f"  キャッシュファイル存在: {cache_path.exists()}")
+        
         result = self._load_cache_data(cache_path)
         
         if result is None:
             self.misses += 1
+            logger.debug(f"  ❌ キャッシュファイルなし or 読み込み失敗")
             return None
         
         df, last_date = result
+        
+        # デバッグログ: キャッシュデータ情報
+        logger.debug(f"  ✅ キャッシュデータ読み込み成功: {len(df)}行, 最終日: {last_date}")
+        if 'Date' in df.columns and len(df) > 0:
+            logger.debug(f"  Date範囲: {df['Date'].min()} ~ {df['Date'].max()}")
         
         # 最終更新日が古すぎる場合は無効
         try:
@@ -166,21 +178,29 @@ class PersistentPriceCache:
                 
                 filtered_df = df[(df['Date'] >= start_dt) & (df['Date'] <= end_dt)].copy()
                 
+                # デバッグログ: フィルタリング結果
+                logger.debug(f"  第1フィルター: {len(filtered_df)}行 (start_dt <= Date <= end_dt)")
+                
                 # 必要な期間のデータが十分にあるか確認
                 if len(filtered_df) > 0:
                     self.hits += 1
-                    logger.debug(f"キャッシュヒット: {stock_code} ({len(filtered_df)}行)")
+                    logger.debug(f"  ✅ キャッシュヒット: {stock_code} ({len(filtered_df)}行)")
                     return filtered_df
                 
                 # end_dt が最新データより新しい場合、start_dt以降のすべてのデータを返す
                 # （土日実行時のキャッシュミスマッチ対策）
                 filtered_df = df[df['Date'] >= start_dt].copy()
+                
+                # デバッグログ: 第2フィルター結果
+                logger.debug(f"  第2フィルター: {len(filtered_df)}行 (Date >= start_dt)")
+                
                 if len(filtered_df) > 0:
                     self.hits += 1
-                    logger.debug(f"キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行, end_dt超過)")
+                    logger.debug(f"  ✅ キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行, end_dt超過)")
                     return filtered_df
                 else:
-                    logger.debug(f"キャッシュに必要な期間のデータなし: {stock_code}")
+                    logger.debug(f"  ❌ キャッシュに必要な期間のデータなし: {stock_code}")
+                    logger.debug(f"     start_dt: {start_dt}, キャッシュ最古日: {df['Date'].min() if len(df) > 0 else 'N/A'}")
                     self.misses += 1
                     return None
             else:
