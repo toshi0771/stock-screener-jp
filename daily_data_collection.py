@@ -590,7 +590,11 @@ class StockScreener:
     async def get_latest_trading_date(self):
         """最新の取引日を取得（検出銘柄の有無に関わらず）"""
         from trading_day_helper import get_latest_trading_day
-        return get_latest_trading_day()
+        import aiohttp
+        
+        async with aiohttp.ClientSession() as session:
+            latest_date = await get_latest_trading_day(self.jq_client, session)
+            return latest_date.strftime('%Y-%m-%d')
     
     def calculate_ema(self, series, period):
         """EMAを計算"""
