@@ -195,6 +195,15 @@ class PersistentPriceCache:
                 logger.debug(f"  第2フィルター: {len(filtered_df)}行 (Date >= start_dt)")
                 
                 if len(filtered_df) > 0:
+                    # キャッシュの最古日がstart_dtより新しい場合、データ不足と判定
+                    cache_oldest_date = df['Date'].min()
+                    if cache_oldest_date > start_dt:
+                        logger.debug(f"  ⚠️ キャッシュデータ不足: {stock_code}")
+                        logger.debug(f"     要求開始日: {start_dt}, キャッシュ最古日: {cache_oldest_date}")
+                        logger.debug(f"     差分: {(cache_oldest_date - start_dt).days}日不足")
+                        self.misses += 1
+                        return None  # APIからの追加取得を促す
+                    
                     self.hits += 1
                     logger.debug(f"  ✅ キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行, end_dt超過)")
                     return filtered_df
