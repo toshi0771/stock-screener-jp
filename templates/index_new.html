@@ -387,15 +387,6 @@
             
             <!-- パーフェクトオーダー専用オプション -->
             <div class="option-group" id="perfectOrderOptions" style="display: none;">
-                <label class="option-label">株価と200SMAの関係</label>
-                <select class="option-select" id="sma200Select">
-                    <option value="all">全て</option>
-                    <option value="above">上</option>
-                    <option value="below">下</option>
-                </select>
-            </div>
-            
-            <div class="option-group" id="perfectOrderOptions2" style="display: none;">
                 <label class="option-label">株価と50EMAとの乖離率</label>
                 <select class="option-select" id="ema50DivergenceSelect">
                     <option value="all">全て</option>
@@ -486,7 +477,6 @@
                 const periodSelect = document.getElementById('periodSelect');
                 const optionsArea = document.getElementById('optionsArea');
                 const perfectOrderOptions = document.getElementById('perfectOrderOptions');
-                const perfectOrderOptions2 = document.getElementById('perfectOrderOptions2');
                 const bollingerOptions = document.getElementById('bollingerOptions');
                 const pullbackOptions = document.getElementById('pullbackOptions');
                 const pullbackOptions2 = document.getElementById('pullbackOptions2');
@@ -502,33 +492,32 @@
                     // 手法別のオプション表示切り替え
                     if (selectedMethod === 'perfect_order') {
                         perfectOrderOptions.style.display = 'block';
-                        perfectOrderOptions2.style.display = 'block';
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === 'bollinger_band') {
                         perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
+
                         bollingerOptions.style.display = 'block';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === '200day_pullback') {
                         perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
+
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'block';
                         pullbackOptions2.style.display = 'block';
                         squeezeOptions.style.display = 'none';
                     } else if (selectedMethod === 'squeeze') {
                         perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
+
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                         squeezeOptions.style.display = 'block';
                     } else {
                         perfectOrderOptions.style.display = 'none';
-                        perfectOrderOptions2.style.display = 'none';
+
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
@@ -579,21 +568,8 @@
                             // パーフェクトオーダー（2列）
                             html += '<div style="margin-bottom: 30px;">';
                             html += '<h4 style="color: #059669; margin-bottom: 10px;">パーフェクトオーダー</h4>';
-                            html += '<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">';
-                            
-                            // 株価 > 200SMA
-                            html += '<div>';
-                            html += '<h5 style="color: #10b981; margin: 0 0 10px 0;">株価 > 200SMA (' + (row.perfect_order_above_200sma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.perfect_order_above_200sma, 'perfect_order_above');
+                            html += renderCategoryStocks(row.perfect_order, 'perfect_order');
                             html += '</div>';
-                            
-                            // 株価 < 200SMA
-                            html += '<div>';
-                            html += '<h5 style="color: #f59e0b; margin: 0 0 10px 0;">株価 < 200SMA (' + (row.perfect_order_below_200sma?.length || 0) + '銘柄)</h5>';
-                            html += renderCategoryStocks(row.perfect_order_below_200sma, 'perfect_order_below');
-                            html += '</div>';
-                            
-                            html += '</div></div>';
                             
                             // ボリンジャーバンド（2列）
                             html += '<div style="margin-bottom: 30px;">';
@@ -672,7 +648,6 @@
                     
                     // パーフェクトオーダーの場合、オプションを追加
                     if (selectedMethod === 'perfect_order') {
-                        options.sma200 = document.getElementById('sma200Select').value;
                         options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
                     }
                     

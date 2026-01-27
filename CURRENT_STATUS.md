@@ -874,3 +874,161 @@ if cache_oldest_date > start_dt:
 1.  **GitHubにコミット＆プッシュ**
 2.  **GitHub Actionsで再実行し、すべてのスクリーニングで検出が正常に行われることを確認**
 3.  **Supabaseの表示が正常であることを確認**
+
+
+---
+
+## 🚀 修正案E: lookback_days最適化と200SMAフィルター削除（2026-01-27実装）
+
+### 背景
+
+ユーザーからの指摘により、各スクリーニング手法のデータ要求期間に無駄があることが判明。特にボリンジャーバンドは20日分のデータしか必要ないのに300日分を要求しており、キャッシュデータ不足問題を悪化させていた。
+
+### 根本原因
+
+1. **ボリンジャーバンド**: 20SMAの計算には20日分で十分だが、300日分を要求
+2. **200日新高値押し目**: 52週（260日）ではなく200日新高値が正しい仕様
+3. **パーフェクトオーダー**: 200SMAフィルターが不要（ユーザー要望により削除）
+
+### 実装した修正
+
+#### 1. バックエンド（daily_data_collection.py）
+
+| スクリーニング | 修正前 | 修正後 | 削減率 | 理由 |
+|---|---|---|---|---|
+| **ボリンジャーバンド** | 300日 | **50日** | 83% | 20SMA計算に必要な期間 |
+| **200日新高値押し目** | 300日 | **400日** | -33% | 200日新高値計算に必要（260日→200日に修正） |
+| **パーフェクトオーダー** | 400日 | **100日** | 75% | 200SMAフィルター削除により短縮 |
+| **スクイーズ** | 200日 | 200日 | 0% | 変更なし |
+
+#### 2. 200日新高値押し目の仕様修正
+
+**変更前（誤り）:**
+```python
+# 52週最高値（利用可能なデータの範囲内で計算、最大260日）
+lookback_days = min(260, len(df))
+high_52w = df['High'].tail(lookback_days).max()
+```
+
+**変更後（正しい）:**
+```python
+# 200日最高値（利用可能なデータの範囲内で計算、最大200日）
+lookback_days = min(200, len(df))
+high_200d = df['High'].tail(lookback_days).max()
+```
+
+- 変数名: `high_52w` → `high_200d`
+- ログメッセージ: 「52週高値」→「200日新高値」
+- 返却フィールド: `high_52week` → `high_200day`
+
+#### 3. パーフェクトオーダーの200SMAフィルター削除
+
+**削除した機能:**
+- 200SMA計算コード
+- 200SMAフィルターロジック（above/below/all）
+- 統計情報の`passed_sma200`カウンター
+- ログ出力の200SMAフィルター通過情報
+- 返却データの`sma200`と`sma200_position`フィールド
+
+**変更前:**
+```python
+# 200SMA計算
+df['SMA200'] = self.calculate_sma(df['Close'], 200)
+
+# 200SMAフィルター適用
+if PERFECT_ORDER_SMA200_FILTER == "above":
+    if latest['Close'] < latest['SMA200']:
+        return None
+elif PERFECT_ORDER_SMA200_FILTER == "below":
+    if latest['Close'] > latest['SMA200']:
+        return None
+```
+
+**変更後:**
+```python
+# 200SMA関連コードを完全削除
+```
+
+#### 4. フロントエンド（templates/index_new.html）
+
+**削除した要素:**
+1. **HTMLセレクト要素:**
+   ```html
+   <label class="option-label">株価と200SMAの関係</label>
+   <select class="option-select" id="sma200Select">
+       <option value="all">全て</option>
+       <option value="above">上</option>
+       <option value="below">下</option>
+   </select>
+   ```
+
+2. **JavaScriptオプション送信:**
+   ```javascript
+   // 削除前
+   if (selectedMethod === 'perfect_order') {
+       options.sma200 = document.getElementById('sma200Select').value;
+       options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
+   }
+   
+   // 削除後
+   if (selectedMethod === 'perfect_order') {
+       options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
+   }
+   ```
+
+3. **過去データ表示の200SMA分岐:**
+   ```javascript
+   // 削除前
+   html += '<h5>株価 > 200SMA (' + count + '銘柄)</h5>';
+   html += '<h5>株価 < 200SMA (' + count + '銘柄)</h5>';
+   
+   // 削除後
+   html += '<h4>パーフェクトオーダー</h4>';
+   html += renderCategoryStocks(row.perfect_order, 'perfect_order');
+   ```
+
+4. **JavaScript変数参照:**
+   - `perfectOrderOptions2`の完全削除
+   - 全ての`perfectOrderOptions2.style.display`行を削除
+
+### 期待される効果
+
+1. **ボリンジャーバンド:**
+   - データ取得量83%削減
+   - キャッシュヒット率大幅向上
+   - 検出ゼロ問題の根本解決
+
+2. **200日新高値押し目:**
+   - 正しい仕様（200日新高値）に修正
+   - 検出精度向上
+
+3. **パーフェクトオーダー:**
+   - データ取得量75%削減
+   - 処理速度大幅向上
+   - UIのシンプル化
+
+4. **全体:**
+   - 永続キャッシュの効率向上
+   - API呼び出し回数削減
+   - 検出ゼロ問題の大幅改善
+
+### 検証方法
+
+1. GitHub Actionsで4つのワークフローを再実行
+2. ログで以下を確認:
+   - ボリンジャーバンド: 検出数が回復
+   - 200日新高値押し目: 「200日新高値」のログ出力
+   - パーフェクトオーダー: 処理時間の短縮
+3. フロントエンド: 200SMAフィルターが表示されないことを確認
+
+### 関連ファイル
+
+- `daily_data_collection.py` - バックエンドロジック
+- `templates/index_new.html` - フロントエンドUI
+- `CURRENT_STATUS.md` - このドキュメント
+
+### 備考
+
+- 修正案Dの永続キャッシュバグ修正と併用することで、最大の効果を発揮
+- 200SMAフィルターは完全削除されたため、過去データも200SMA分岐なしで表示される
+- 今後、200SMAフィルターを再度追加する場合は、フロントエンド・バックエンド両方の修正が必要

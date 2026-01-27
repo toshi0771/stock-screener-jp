@@ -26,7 +26,7 @@ from trading_day_helper import get_latest_trading_day, get_date_range_for_screen
 # ============================================================
 
 # パーフェクトオーダーオプション
-PERFECT_ORDER_SMA200_FILTER = "all"  # "above" (200SMAより上), "below" (200SMAより下), "all" (全て)
+# PERFECT_ORDER_SMA200_FILTER = "all"  # 削除済み
 
 # 200日新高値押し目オプション
 PULLBACK_EMA_FILTER = "all"  # "10ema", "20ema", "50ema", "all" (いずれか)
@@ -154,15 +154,13 @@ class SupabaseClient:
                     "ema_10": safe_float(stock.get("ema10") or stock.get("ema_10")),
                     "ema_20": safe_float(stock.get("ema20") or stock.get("ema_20")),
                     "ema_50": safe_float(stock.get("ema50") or stock.get("ema_50")),
-                    "week52_high": safe_float(stock.get("high_52week")),
+                    "week52_high": safe_float(stock.get("high_200day")),
                     "touch_ema": str(stock.get("touched_emas") or stock.get("ema_touch") or "") if (stock.get("touched_emas") or stock.get("ema_touch")) else None,
                     "pullback_percentage": safe_float(stock.get("pullback_pct")),
                     "bollinger_upper": safe_float(stock.get("upper_3sigma")),
                     "bollinger_lower": safe_float(stock.get("lower_3sigma")),
                     "bollinger_middle": safe_float(stock.get("sma20")),
                     "touch_direction": str(stock.get("touch_direction", "upper")),
-                    "sma_200": safe_float(stock.get("sma200")),
-                    "sma200_position": str(stock.get("sma200_position", "")) if stock.get("sma200_position") else None,
                     "stochastic_k": safe_float(stock.get("stochastic_k")),
                     "stochastic_d": safe_float(stock.get("stochastic_d"))
                 }
@@ -648,7 +646,7 @@ class StockScreener:
             return [s for s in all_stocks_data if s.get(market_field) in market_codes]
 
     async def screen_stock_perfect_order(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄のパーフェクトオーダースクリーニング（200SMAオプション付き）"""
+        """単一銘柄のパーフェクトオーダースクリーニング"""
         code = stock["Code"]
         # V2 APIでは "CoName"、V1 APIでは "CompanyName"
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
@@ -663,19 +661,18 @@ class StockScreener:
                 "data_insufficient": 0,
                 "passed_perfect_order": 0,
                 "passed_divergence": 0,
-                "passed_sma200": 0,
                 "final_detected": 0
             }
         
         self.perfect_order_stats["total"] += 1
         
         try:
-            # 株価データ取得（200SMA用に追加データ取得）
+            # 株価データ取得
             # キャッシュされた最新の取引日を使用
             end_date = self.latest_trading_date
             
-            # 日付範囲を取得（400日分）
-            start_str, end_str = get_date_range_for_screening(end_date, 400)
+            # 日付範囲を取得（100日分、200SMAフィルター削除により短縮）
+            start_str, end_str = get_date_range_for_screening(end_date, 100)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -696,18 +693,15 @@ class StockScreener:
             
             self.perfect_order_stats["has_data"] += 1
             
-            if len(df) < 200:
+            if len(df) < 50:
                 self.perfect_order_stats["data_insufficient"] += 1
-                logger.debug(f"[{code}] データ不足: {len(df)}行 < 200行")
+                logger.debug(f"[{code}] データ不足: {len(df)}行 < 50行")
                 return None
             
             # EMA計算
             df['EMA10'] = self.calculate_ema(df['Close'], 10)
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
             df['EMA50'] = self.calculate_ema(df['Close'], 50)
-            
-            # 200SMA計算
-            df['SMA200'] = self.calculate_sma(df['Close'], 200)
             
             latest = df.iloc[-1]
             
@@ -727,19 +721,6 @@ class StockScreener:
                 return None
             
             self.perfect_order_stats["passed_divergence"] += 1
-            
-            # 200SMAフィルター適用
-            if PERFECT_ORDER_SMA200_FILTER == "above":
-                if latest['Close'] < latest['SMA200']:
-                    logger.debug(f"[{code}] 200SMAフィルター除外: Close={latest['Close']:.2f} < SMA200={latest['SMA200']:.2f}")
-                    return None
-            elif PERFECT_ORDER_SMA200_FILTER == "below":
-                if latest['Close'] > latest['SMA200']:
-                    logger.debug(f"[{code}] 200SMAフィルター除外: Close={latest['Close']:.2f} > SMA200={latest['SMA200']:.2f}")
-                    return None
-            # "all"の場合はフィルターなし
-            
-            self.perfect_order_stats["passed_sma200"] += 1
             self.perfect_order_stats["final_detected"] += 1
             
             return {
@@ -749,8 +730,6 @@ class StockScreener:
                 "ema10": float(latest['EMA10']),
                 "ema20": float(latest['EMA20']),
                 "ema50": float(latest['EMA50']),
-                "sma200": float(latest['SMA200']),
-                "sma200_position": "above" if latest['Close'] >= latest['SMA200'] else "below",
                 "market": self._market_code_to_name(market),
                 "volume": int(latest.get('Volume', 0))
             }
@@ -771,8 +750,8 @@ class StockScreener:
             # キャッシュされた最新の取引日を使用
             end_date = self.latest_trading_date
             
-            # 日付範囲を取得（300日分）
-            start_str, end_str = get_date_range_for_screening(end_date, 300)
+            # 日付範囲を取得（50日分、20SMAのみ必要）
+            start_str, end_str = get_date_range_for_screening(end_date, 50)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -866,8 +845,8 @@ class StockScreener:
             # キャッシュされた最新の取引日を使用
             end_date = self.latest_trading_date
             
-            # 日付範囲を取得（300日分）
-            start_str, end_str = get_date_range_for_screening(end_date, 300)
+            # 日付範囲を取得（400日分、200日新高値計算に必要）
+            start_str, end_str = get_date_range_for_screening(end_date, 400)
             
             # 永続キャッシュから取得を試みる
             df = await self.persistent_cache.get(code, start_str, end_str)
@@ -883,7 +862,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 200:  # 約8ヶ月分のデータがあればOK
+            if df is None or len(df) < 260:  # 約8ヶ月分のデータがあればOK
                 return None
             
             self.pullback_stats['has_data'] += 1
@@ -893,26 +872,26 @@ class StockScreener:
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
             df['EMA50'] = self.calculate_ema(df['Close'], 50)
             
-            # 52週最高値（利用可能なデータの範囲内で計算、最大260日）
-            lookback_days = min(260, len(df))
-            high_52w = df['High'].tail(lookback_days).max()
+            # 200日最高値（利用可能なデータの範囲内で計算、最大200日）
+            lookback_days = min(200, len(df))
+            high_200d = df['High'].tail(lookback_days).max()
             latest = df.iloc[-1]
             current_price = latest['Close']
             
-            # 52週新高値を記録した日を特定
-            high_52w_date_idx = df['High'].tail(lookback_days).idxmax()
-            days_since_high = len(df) - 1 - high_52w_date_idx
+            # 200日新高値を記録した日を特定
+            high_200d_date_idx = df['High'].tail(lookback_days).idxmax()
+            days_since_high = len(df) - 1 - high_200d_date_idx
             
-            # 条件1: 過去60日以内に52週新高値を更新していること
+            # 条件1: 過去60日以内に200日新高値を更新していること
             if days_since_high <= 60:
                 self.pullback_stats['recent_high'] += 1
             else:
                 return None
             
             # 新高値からの下落率
-            pullback_pct = ((high_52w - current_price) / high_52w) * 100
+            pullback_pct = ((high_200d - current_price) / high_200d) * 100
             
-            # 条件2: 52週新高値から30%以内の押し目
+            # 条件2: 200日新高値から30%以内の押し目
             if pullback_pct <= 30:
                 self.pullback_stats['within_30pct'] += 1
             else:
@@ -941,8 +920,8 @@ class StockScreener:
                 logger.info(f"  EMA10: {latest['EMA10']:,.2f}円")
                 logger.info(f"  EMA20: {latest['EMA20']:,.2f}円")
                 logger.info(f"  EMA50: {latest['EMA50']:,.2f}円")
-                logger.info(f"52週高値: {high_52w:,.0f}円")
-                logger.info(f"52週高値更新日: {df.iloc[high_52w_date_idx]['Date']} ({days_since_high}日前)")
+                logger.info(f"200日新高値: {high_200d:,.0f}円")
+                logger.info(f"200日新高値更新日: {df.iloc[high_200d_date_idx]['Date']} ({days_since_high}日前)")
                 logger.info(f"下落率: {pullback_pct:.2f}%")
             
             # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
@@ -997,7 +976,7 @@ class StockScreener:
                 "code": code,
                 "name": name,
                 "price": float(current_price),
-                "high_52week": float(high_52w),
+                "high_200day": float(high_200d),
                 "pullback_pct": round(pullback_pct, 2),
                 "touched_emas": ",".join(touched_emas),
                 "ema_10": float(latest['EMA10']),
@@ -1235,7 +1214,6 @@ class StockScreener:
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
         logger.info("=" * 60)
         logger.info("スクリーニングオプション設定:")
-        logger.info(f"  - パーフェクトオーダー 200SMAフィルター: {PERFECT_ORDER_SMA200_FILTER}")
         logger.info(f"  - 200日新高値押し目 EMAフィルター: {PULLBACK_EMA_FILTER}")
         logger.info(f"  - 200日新高値押し目 ストキャスティクス: {'ON' if PULLBACK_STOCHASTIC_FILTER else 'OFF'}")
         logger.info("=" * 60)
@@ -1273,11 +1251,6 @@ class StockScreener:
                 logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 ({stats['passed_divergence']/stats['passed_perfect_order']*100:.2f}% of 条件1通過)")
             else:
                 logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 (条件1通過が0のため計算不可)")
-            
-            if stats['passed_divergence'] > 0:
-                logger.info(f"  3️⃣ 200SMAフィルター通過: {stats['passed_sma200']:,}銘柄 ({stats['passed_sma200']/stats['passed_divergence']*100:.2f}% of 条件2通過)")
-            else:
-                logger.info(f"  3️⃣ 200SMAフィルター通過: {stats['passed_sma200']:,}銘柄 (条件2通過が0のため計算不可)")
             
             logger.info(f"\n⭐ 全条件通過: {stats['final_detected']:,}銘柄")
             logger.info("="*60 + "\n")
@@ -1342,9 +1315,9 @@ class StockScreener:
             logger.info(f"\n🔹 条件別通過状況:")
             
             if stats['has_data'] > 0:
-                logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄 ({stats['recent_high']/stats['has_data']*100:.2f}%)")
+                logger.info(f"  1️⃣ 60日以内に200日新高値更新: {stats['recent_high']:,}銘柄 ({stats['recent_high']/stats['has_data']*100:.2f}%)")
             else:
-                logger.info(f"  1️⃣ 60日以内に52週高値更新: {stats['recent_high']:,}銘柄")
+                logger.info(f"  1️⃣ 60日以内に200日新高値更新: {stats['recent_high']:,}銘柄")
             
             if stats['recent_high'] > 0:
                 logger.info(f"  2️⃣ 30%以内の押し目: {stats['within_30pct']:,}銘柄 ({stats['within_30pct']/stats['recent_high']*100:.2f}% of 条件1通過)")
@@ -1439,7 +1412,6 @@ class StockScreener:
             "total_stocks": len(stocks),
             "execution_time_seconds": round(total_time, 1),
             "options": {
-                "perfect_order_sma200": PERFECT_ORDER_SMA200_FILTER,
                 "pullback_ema": PULLBACK_EMA_FILTER,
                 "pullback_stochastic": PULLBACK_STOCHASTIC_FILTER
             },
