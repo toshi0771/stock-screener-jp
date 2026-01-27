@@ -581,6 +581,11 @@ class StockScreener:
         self.persistent_cache = PersistentPriceCache()  # 永続キャッシュインスタンス
         self.latest_trading_date = None  # 最新の取引日（キャッシュ）
     
+    async def get_latest_trading_date(self):
+        """最新の取引日を取得（検出銘柄の有無に関わらず）"""
+        from trading_day_helper import get_latest_trading_day
+        return get_latest_trading_day()
+    
     def calculate_ema(self, series, period):
         """EMAを計算"""
         return series.ewm(span=period, adjust=False).mean()

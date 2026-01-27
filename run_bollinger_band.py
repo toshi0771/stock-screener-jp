@@ -60,27 +60,9 @@ async def main():
         bb_time = int((datetime.now() - bb_start).total_seconds() * 1000)
         logger.info(f"✅ ボリンジャーバンド検出: {len(bollinger_band)}銘柄 ({bb_time}ms)")
         
-        # 最新取引日を取得（検出された銘柄から）
-        if bollinger_band:
-            # 最初の銘柄から最新取引日を取得
-            first_stock = bollinger_band[0]
-            code = first_stock["code"]
-            end_date = datetime.now()
-            start_date = end_date - timedelta(days=10)
-            start_str = start_date.strftime("%Y%m%d")
-            end_str = end_date.strftime("%Y%m%d")
-            
-            import aiohttp
-            async with aiohttp.ClientSession() as session:
-                df = await screener.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    screener.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                if df is not None and len(df) > 0:
-                    latest_date = df.iloc[-1]['Date']
-                    target_date = pd.to_datetime(latest_date).strftime('%Y-%m-%d')
-                    logger.info(f"📅 最新取引日: {target_date}")
+        # 最新取引日を取得（検出銘柄の有無に関わらず）
+        target_date = await screener.get_latest_trading_date()
+        logger.info(f"📅 最新取引日: {target_date}")
         
         # 間引き処理
         bollinger_band_sampled = sample_stocks_balanced(bollinger_band, max_per_range=10)
