@@ -54,6 +54,11 @@ async def main():
             sys.exit(1)
         
         logger.info(f"✅ 銘柄一覧取得完了: {len(stocks)}銘柄")
+        
+        # 🔧 FIX: 最新取引日を事前に取得してキャッシュ（スクリーニング前に実行）
+        screener.latest_trading_date = await screener.get_latest_trading_date()
+        logger.info(f"📅 最新取引日（キャッシュ済み）: {screener.latest_trading_date}")
+        
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
         logger.info(f"EMAフィルター: {PULLBACK_EMA_FILTER}")
         logger.info(f"ストキャスティクス: {'ON' if PULLBACK_STOCHASTIC_FILTER else 'OFF'}")
@@ -66,9 +71,8 @@ async def main():
         pb_time = int((datetime.now() - pb_start).total_seconds() * 1000)
         logger.info(f"✅ 200日新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
         
-        # 最新取引日を取得（検出銘柄の有無に関わらず）
-        target_date = await screener.get_latest_trading_date()
-        logger.info(f"📅 最新取引日: {target_date}")
+        # 最新取引日を使用（すでにキャッシュ済み）
+        target_date = screener.latest_trading_date
         
         # 統計情報を表示
         if hasattr(screener, 'pullback_stats'):
