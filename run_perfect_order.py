@@ -10,8 +10,7 @@ from daily_data_collection import (
     StockScreener, 
     sample_stocks_balanced,
     logger,
-    CONCURRENT_REQUESTS,
-    PERFECT_ORDER_SMA200_FILTER
+    CONCURRENT_REQUESTS
 )
 
 async def main():
@@ -60,7 +59,6 @@ async def main():
         logger.info("=" * 80)
         logger.info("🎯 パーフェクトオーダースクリーニング開始")
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
-        logger.info(f"200SMAフィルター: {PERFECT_ORDER_SMA200_FILTER}")
         logger.info("=" * 80)
         
         po_start = datetime.now()
