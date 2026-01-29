@@ -1358,3 +1358,77 @@ async def get_latest_trading_day(jq_client, session, base_date=None):
     -   `📅 最新取引日（キャッシュ済み）: 2026-01-28`
     -   永続キャッシュのヒット率が80%以上に回復している。
     -   各スクリーニングで検出銘柄数が0より大きい。
+
+
+---
+
+## ✅ 修正案I: タイムゾーン対応（JSTでの16:00判定）（2026-01-30実装）
+
+### 背景
+
+修正案H（16:00チェック）を実装後も、全スクリーニングで検出ゼロが継続。ログを詳細に分析した結果、GitHub Actionsの実行環境がUTC（グリニッジ標準時）であるため、時刻判定が日本時間（JST）とずれていることが判明。
+
+### 根本原因
+
+**GitHub Actions（UTC）とjQuants API（JST）のタイムゾーンの齟齬**
+
+1.  GitHub Actionsは**UTC**で動作するため、`datetime.now()`はUTC時刻を返す。
+2.  jQuants APIのデータ提供は**JST 16:00**以降。
+3.  例えば、GitHub Actionsが**UTC 12:00**に実行されると、これは**JST 21:00**に相当する。
+4.  修正案Hのロジックは、`current_hour = 12`と判定し、`12 < 16`であるため、**誤って前日を基準日としていた**。
+5.  しかし、実際にはJST 21:00なので、当日のデータが利用可能であるべき。
+6.  この1日のずれにより、永続キャッシュが機能せず、検出ゼロ問題が継続していた。
+
+### 実施した修正
+
+**修正対象ファイル:**
+- `trading_day_helper.py`
+
+**修正内容:**
+
+`get_latest_trading_day()`関数を修正し、時刻判定を日本時間（JST）で行うように変更。
+
+1.  **`pytz`のインポート:** タイムゾーン処理のために`pytz`をインポート。
+2.  **JSTへの変換:** `datetime.now()`で取得したUTC時刻を、`pytz`を使ってJSTに変換。
+3.  **JSTでの16:00判定:** 変換後のJST時刻で16:00より前か後かを判定。
+4.  **ログの明確化:** ログに`JST`と明記し、タイムゾーンを意識したデバッグを容易にした。
+5.  **戻り値の調整:** 外部モジュールとの互換性のため、最終的に返す`datetime`オブジェクトからはタイムゾーン情報を削除（naive datetimeに戻す）。
+
+```python
+# trading_day_helper.py
+import pytz
+
+async def get_latest_trading_day(jq_client, session, base_date=None):
+    # 🔧 FIX: 日本時間（JST）に変換
+    jst = pytz.timezone("Asia/Tokyo")
+    
+    if base_date is None:
+        base_date_jst = datetime.now(pytz.utc).astimezone(jst)
+    # ...（タイムゾーン変換処理）...
+    
+    # 16:00前チェック（日本時間で判定）
+    current_hour = base_date_jst.hour  # ← JST時刻
+    logger.info(f"⏰ 現在時刻（JST）: {base_date_jst.strftime("%Y-%m-%d %H:%M:%S %Z")}")
+    
+    if current_hour < 16:  # ← JSTで判定（正しい）
+        # ...
+```
+
+### 期待される効果
+
+| GitHub Actions (UTC) | JST | 修正前 (H) | 修正後 (I) | 結果 |
+|---|---|---|---|---|
+| 06:00 | 15:00 | 前日 ✅ | 前日 ✅ | 正しい |
+| **07:00** | **16:00** | **前日 ❌** | **当日 ✅** | **修正成功** |
+| **12:00** | **21:00** | **前日 ❌** | **当日 ✅** | **修正成功** |
+
+この修正により、GitHub Actionsの実行時刻（UTC）に関わらず、常にJST 16:00を基準とした正しい日付判定が行われ、永続キャッシュが正常に機能することが期待される。
+
+### 検証方法
+
+1.  GitHub Actionsで4つのワークフローを再実行。
+2.  ログで以下を確認:
+    -   `⏰ 現在時刻（JST）: 2026-01-30 08:00:00 JST` のように、JSTでの時刻が表示される。
+    -   JST 16:00をまたぐ時刻での判定が正しいか確認。
+    -   永続キャッシュのヒット率が80%以上に回復している。
+    -   各スクリーニングで検出銘柄数が0より大きい。
