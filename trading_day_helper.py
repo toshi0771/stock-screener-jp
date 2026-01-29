@@ -26,6 +26,17 @@ async def get_latest_trading_day(jq_client, session: aiohttp.ClientSession, base
     if base_date is None:
         base_date = datetime.now()
     
+    # 🔧 FIX: 16:00前チェック
+    current_hour = base_date.hour
+    logger.info(f"⏰ 現在時刻: {base_date.strftime('%Y-%m-%d %H:%M:%S')}")
+    
+    if current_hour < 16:
+        logger.info(f"⏰ 現在時刻 {current_hour}:00 < 16:00 のため、前日を基準日とします")
+        logger.info(f"   理由: jQuants APIのデータ提供は16:00以降です")
+        base_date = base_date - timedelta(days=1)
+    else:
+        logger.info(f"⏰ 現在時刻 {current_hour}:00 >= 16:00 のため、当日を基準日とします")
+    
     end_date = base_date
     max_attempts = 10
     attempts = 0
@@ -44,7 +55,7 @@ async def get_latest_trading_day(jq_client, session: aiohttp.ClientSession, base
             is_trading = await jq_client.is_trading_day(session, date_str)
             
             if is_trading:
-                logger.debug(f"✅ 取引日確定: {date_str} ({['月', '火', '水', '木', '金', '土', '日'][end_date.weekday()]})")
+                logger.info(f"✅ 取引日確定: {date_str} ({['月', '火', '水', '木', '金', '土', '日'][end_date.weekday()]})")
                 return end_date
             else:
                 logger.debug(f"  非取引日: {date_str}")
