@@ -592,7 +592,7 @@ class StockScreener:
         
         async with aiohttp.ClientSession() as session:
             latest_date = await get_latest_trading_day(self.jq_client, session)
-            return latest_date.strftime('%Y-%m-%d')
+            return latest_date  # ← datetimeオブジェクトをそのまま返す（文字列に変換しない）
     
     def calculate_ema(self, series, period):
         """EMAを計算"""
