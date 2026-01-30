@@ -55,7 +55,7 @@ async def get_latest_trading_day(jq_client, session: aiohttp.ClientSession, base
     max_attempts = 10
     attempts = 0
     
-    logger.debug(f"取引日取得開始: base_date={base_date.strftime('%Y-%m-%d %H:%M:%S')}")
+    logger.debug(f"取引日取得開始: base_date_jst={base_date_jst.strftime('%Y-%m-%d %H:%M:%S %Z')}")
     
     while attempts < max_attempts:
         # 週末をスキップ
