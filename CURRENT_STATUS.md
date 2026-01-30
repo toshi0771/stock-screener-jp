@@ -1432,3 +1432,44 @@ async def get_latest_trading_day(jq_client, session, base_date=None):
     -   JST 16:00をまたぐ時刻での判定が正しいか確認。
     -   永続キャッシュのヒット率が80%以上に回復している。
     -   各スクリーニングで検出銘柄数が0より大きい。
+
+
+---
+
+## ✅ 修正案J: AttributeError修正（2026-01-30実装）
+
+### 背景
+
+修正案I（タイムゾーン対応）を実装後、`AttributeError: 'NoneType' object has no attribute 'strftime'` という新たなエラーが発生。
+
+### 根本原因
+
+**`trading_day_helper.py`内の変数名の不整合**
+
+1.  修正案Iで、`base_date`（引数、デフォルトはNone）を`base_date_jst`（JST変換後のdatetimeオブジェクト）に置き換える処理を追加。
+2.  しかし、Line 58のデバッグログで、`base_date`（Noneのまま）に対して`.strftime()`を呼び出していた。
+3.  `None`オブジェクトには`.strftime()`メソッドがないため、`AttributeError`が発生していた。
+
+### 実施した修正
+
+**修正対象ファイル:**
+- `trading_day_helper.py`
+
+**修正内容:**
+
+Line 58のデバッグログで使用する変数を`base_date`から`base_date_jst`に修正。
+
+```python
+# trading_day_helper.py Line 58
+
+# 修正前
+logger.debug(f"取引日取得開始: base_date={base_date.strftime('%Y-%m-%d %H:%M:%S')}")
+
+# 修正後
+logger.debug(f"取引日取得開始: base_date_jst={base_date_jst.strftime('%Y-%m-%d %H:%M:%S %Z')}")
+```
+
+### 期待される効果
+
+- `AttributeError`が解消され、`get_latest_trading_day()`関数が正常に完了する。
+- 修正案Iのタイムゾーン対応が正しく機能し、検出ゼロ問題が完全に解決される。
