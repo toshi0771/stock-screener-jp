@@ -53,7 +53,7 @@ async def main():
         
         # 🔧 FIX: 最新取引日を事前に取得してキャッシュ（スクリーニング前に実行）
         screener.latest_trading_date = await screener.get_latest_trading_date()
-        logger.info(f"📅 最新取引日（キャッシュ済み）: {screener.latest_trading_date}")
+        logger.info(f"📅 最新取引日（スクリーニング用）: {screener.latest_trading_date}")
         
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
         logger.info("=" * 80)
@@ -79,8 +79,9 @@ async def main():
             logger.info(f"  最終検出数: {stats['passed_all']}銘柄")
             logger.info("="*80)
         
-        # 最新取引日を使用（すでにキャッシュ済み）
+        # 🔧 FIX: 既に取得済みなので再取得不要
         target_date = screener.latest_trading_date
+        logger.info(f"📅 最新取得日（保存用）: {target_date}")
         
         # 間引き処理
         squeeze_sampled = sample_stocks_balanced(squeeze, max_per_range=10)

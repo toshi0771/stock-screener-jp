@@ -57,7 +57,7 @@ async def main():
         
         # 🔧 FIX: 最新取引日を事前に取得してキャッシュ（スクリーニング前に実行）
         screener.latest_trading_date = await screener.get_latest_trading_date()
-        logger.info(f"📅 最新取引日（キャッシュ済み）: {screener.latest_trading_date}")
+        logger.info(f"📅 最新取引日（スクリーニング用）: {screener.latest_trading_date}")
         
         # パーフェクトオーダースクリーニングのみ実行
         logger.info("=" * 80)
@@ -72,8 +72,9 @@ async def main():
         po_time = int((datetime.now() - po_start).total_seconds() * 1000)
         logger.info(f"✅ パーフェクトオーダー検出: {len(perfect_order)}銘柄 ({po_time}ms)")
         
-        # 最新取引日を使用（すでにキャッシュ済み）
+        # 🔧 FIX: 既に取得済みなので再取得不要
         target_date = screener.latest_trading_date
+        logger.info(f"📅 最新取引日（保存用）: {target_date}")
         
         # 間引き処理
         perfect_order_sampled = sample_stocks_balanced(perfect_order, max_per_range=10)
