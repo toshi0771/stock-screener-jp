@@ -674,8 +674,8 @@ class StockScreener:
             # 日付範囲を取得（100日分、200SMAフィルター削除により短縮）
             start_str, end_str = get_date_range_for_screening(end_date, 100)
             
-            # 永続キャッシュから取得を試みる
-            df = await self.persistent_cache.get(code, start_str, end_str)
+            # 永続キャッシュから取得を試みる（100日分のデータが必要）
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=120)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
@@ -753,8 +753,8 @@ class StockScreener:
             # 日付範囲を取得（50日分、20SMAのみ必要）
             start_str, end_str = get_date_range_for_screening(end_date, 50)
             
-            # 永続キャッシュから取得を試みる
-            df = await self.persistent_cache.get(code, start_str, end_str)
+            # 永続キャッシュから取得を試みる（50日分のデータが必要）
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
@@ -848,8 +848,8 @@ class StockScreener:
             # 日付範囲を取得（400日分、200日新高値計算に必要）
             start_str, end_str = get_date_range_for_screening(end_date, 400)
             
-            # 永続キャッシュから取得を試みる
-            df = await self.persistent_cache.get(code, start_str, end_str)
+            # 永続キャッシュから取得を試みる（400日分のデータが必要）
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=420)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
@@ -1021,8 +1021,8 @@ class StockScreener:
             # 日付範囲を取得（200日分）
             start_str, end_str = get_date_range_for_screening(end_date, 200)
             
-            # 永続キャッシュから取得を試みる
-            df = await self.persistent_cache.get(code, start_str, end_str)
+            # 永続キャッシュから取得を試みる（200日分のデータが必要）
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
