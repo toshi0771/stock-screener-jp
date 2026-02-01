@@ -160,8 +160,19 @@ class PersistentPriceCache:
             last_update = datetime.strptime(last_date, '%Y%m%d')
             age = datetime.now() - last_update
             
+            # 🔍 デバッグログ追加：有名銘柄で確認
+            if stock_code in ["6954", "7203", "9984", "6758", "8306"]:
+                logger.info(f"🔍 DEBUG キャッシュ日付チェック [{stock_code}]:")
+                logger.info(f"  - last_date（キャッシュ最終日）: {last_date}")
+                logger.info(f"  - age.days（経過日数）: {age.days}日")
+                logger.info(f"  - max_age_days（許容日数）: {max_age_days}日")
+                logger.info(f"  - 判定: {'❌ 期限切れ' if age.days > max_age_days else '✅ 有効'}")
+            
             if age.days > max_age_days:
                 logger.debug(f"キャッシュ期限切れ: {stock_code} (最終更新: {last_date}, {age.days}日前)")
+                # 🔍 デバッグログ追加
+                if stock_code in ["6954", "7203", "9984", "6758", "8306"]:
+                    logger.info(f"🔍 DEBUG [{stock_code}]: キャッシュ無効判定！ {age.days} > {max_age_days}")
                 self.misses += 1
                 return None
         except Exception as e:
