@@ -845,11 +845,11 @@ class StockScreener:
             # キャッシュされた最新の取引日を使用
             end_date = self.latest_trading_date
             
-            # 日付範囲を取得（280日分、200営業日≈280暦日で十分）
-            start_str, end_str = get_date_range_for_screening(end_date, 280)
+            # 日付範囲を取得（200日分、キャッシュ範囲内に収める）
+            start_str, end_str = get_date_range_for_screening(end_date, 200)
             
-            # 永続キャッシュから取得を試みる（280日分のデータが必要）
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=300)
+            # 永続キャッシュから取得を試みる（200日分のデータが必要）
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
             
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
@@ -862,7 +862,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 150:  # 営業日150日分あればOK（十分に判定可能）
+            if df is None or len(df) < 100:  # 営業日100日分あればOK（最低限の判定可能）
                 return None
             
             self.pullback_stats['has_data'] += 1
