@@ -862,7 +862,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 200:  # 営業日200日分あればOK
+            if df is None or len(df) < 150:  # 営業日150日分あればOK（十分に判定可能）
                 return None
             
             self.pullback_stats['has_data'] += 1
