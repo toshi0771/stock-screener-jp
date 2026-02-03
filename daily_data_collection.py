@@ -1079,11 +1079,11 @@ class StockScreener:
             bbw_min_60d = bbw.iloc[-60:].min()
             atr_min_60d = atr.iloc[-60:].min()
             
-            # 検出条件（元の値に戻す）
-            bbw_threshold = 1.3  # ボリンジャーバンド幅
-            deviation_threshold = 5.0  # 50EMAからの乖離率
+            # 検出条件（以前の値に戻す）
+            bbw_threshold = 1.2  # ボリンジャーバンド幅
+            deviation_threshold = 3.0  # 50EMAからの乖離率
             atr_threshold = 1.3
-            min_duration = 5  # 継続期間
+            min_duration = 7  # 継続期間
             
             # 条件1: BBWが狭い
             bbw_condition = current_bbw <= bbw_min_60d * bbw_threshold
