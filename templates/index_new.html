@@ -455,6 +455,27 @@
     <script>
         let selectedMethod = null;
         
+        // JST（日本時間）で取引日を取得する関数
+        // 16:00前は前日、16:00以降は当日を返す
+        function getJSTTradingDate() {
+            // 現在のUTC時刻を取得
+            const now = new Date();
+            
+            // JSTに変換（UTC+9時間）
+            const jstOffset = 9 * 60; // 9時間 = 540分
+            const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+            
+            // JST時刻を取得
+            const jstHour = jstTime.getUTCHours(); // UTCメソッドを使ってJST時刻を取得
+            
+            // 16:00前は前日、16:00以降は当日
+            if (jstHour < 16) {
+                jstTime.setUTCDate(jstTime.getUTCDate() - 1);
+            }
+            
+            return jstTime;
+        }
+        
         // ストキャスティクストグルの動作
         document.getElementById('stochasticToggle').addEventListener('change', function() {
             const label = document.getElementById('stochasticLabel');
@@ -688,9 +709,9 @@
                         'squeeze': 'スクイーズ（価格収縮）'
                     };
                     
-                    // 現在の日付を取得
-                    const today = new Date();
-                    const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+                    // JST取引日を取得（16:00前は前日、16:00以降は当日）
+                    const tradingDate = getJSTTradingDate();
+                    const dateStr = `${tradingDate.getUTCFullYear()}年${tradingDate.getUTCMonth() + 1}月${tradingDate.getUTCDate()}日`;
                     resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出（${dateStr}）`;
                     
                     if (data.success && data.results.length > 0) {
