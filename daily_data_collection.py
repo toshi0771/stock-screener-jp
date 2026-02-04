@@ -698,6 +698,16 @@ class StockScreener:
                 logger.debug(f"[{code}] データ不足: {len(df)}行 < 50行")
                 return None
             
+            # 最新データの日付をチェック（正確性重視）
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            
+            # キャッシュの最新データが実行日よ3日以上古い場合は除外
+            if (end_date_obj - latest_data_date).days > 3:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
+                return None
+            
             # EMA計算
             df['EMA10'] = self.calculate_ema(df['Close'], 10)
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
@@ -768,6 +778,16 @@ class StockScreener:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 20:
+                return None
+            
+            # 最新データの日付をチェック（正確性重視）
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            
+            # キャッシュの最新データが実行日よ3日以上古い場合は除外
+            if (end_date_obj - latest_data_date).days > 3:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
             # ボリンジャーバンド計算
@@ -863,6 +883,16 @@ class StockScreener:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 100:  # 営業日100日分あればOK（最低限の判定可能）
+                return None
+            
+            # 最新データの日付をチェック（正確性重視）
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            
+            # キャッシュの最新データが実行日よ3日以上古い場合は除外
+            if (end_date_obj - latest_data_date).days > 3:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
             self.pullback_stats['has_data'] += 1
@@ -1036,6 +1066,16 @@ class StockScreener:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None or len(df) < 100:
+                return None
+            
+            # 最新データの日付をチェック（正確性重視）
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            
+            # キャッシュの最新データが実行日よ3日以上古い場合は除外
+            if (end_date_obj - latest_data_date).days > 3:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
             self.squeeze_stats['has_data'] += 1
