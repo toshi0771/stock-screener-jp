@@ -1002,6 +1002,7 @@ class StockScreener:
                 'bbw_failed': 0,
                 'deviation_failed': 0,
                 'atr_failed': 0,
+                'duration_failed': 0,
                 'passed_all': 0
             }
         
@@ -1082,6 +1083,7 @@ class StockScreener:
             bbw_threshold = 1.2  # ボリンジャーバンド幅
             deviation_threshold = 3.0  # 50EMAからの乖離率
             atr_threshold = 1.3
+            min_duration = 7  # 継続期間（固定値）
             
             # 条件1: BBWが狭い
             bbw_condition = current_bbw <= bbw_min_60d * bbw_threshold
@@ -1105,9 +1107,25 @@ class StockScreener:
                 self.squeeze_stats['atr_failed'] += 1
                 return None
             
+            # 継続日数を計算
+            duration = 0
+            for i in range(1, min(len(prices), 30)):  # 最大30日まで遡る
+                idx = -i
+                if (bbw.iloc[idx] <= bbw_min_60d * bbw_threshold and
+                    deviation.iloc[idx] <= deviation_threshold * 1.4 and
+                    atr.iloc[idx] <= atr_min_60d * atr_threshold):
+                    duration += 1
+                else:
+                    break
+            
+            # 最小継続期間を満たすか確認
+            if duration < min_duration:
+                self.squeeze_stats['duration_failed'] += 1
+                return None
+            
             # すべての条件を満たした
             self.squeeze_stats['passed_all'] += 1
-            logger.info(f"✅ スクイーズ検出 [{code}]")
+            logger.info(f"✅ スクイーズ検出 [{code}]: 継続{duration}日")
             
             # 検出結果を返す
             return {
@@ -1122,7 +1140,7 @@ class StockScreener:
                 "current_atr": float(current_atr),
                 "atr_min_60d": float(atr_min_60d),
                 "atr_ratio": float(current_atr / atr_min_60d) if atr_min_60d > 0 else None,
-
+                "duration_days": int(duration),
                 "ema_50": float(current_ema50),
                 "volume": int(df.iloc[-1].get('Volume', 0))
             }
@@ -1361,6 +1379,7 @@ class StockScreener:
                         "current_atr": s["current_atr"],
                         "atr_min_60d": s["atr_min_60d"],
                         "atr_ratio": s["atr_ratio"],
+                        "duration_days": s["duration_days"],
                         "current_price": s["price"],
                         "ema_50": s["ema_50"]
                     }
