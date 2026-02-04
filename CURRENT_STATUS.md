@@ -1,8 +1,8 @@
 # 日本株スクリーニングシステム - 現在の状況
 
-**最終更新:** 2026年2月2日 23:00  
+**最終更新:** 2026年2月4日 02:30  
 **プロジェクト:** 日本株スクリーニングシステム（J-Quants API使用）  
-**総コミット数:** 127個以上
+**総コミット数:** 130個以上
 
 ---
 
@@ -317,7 +317,160 @@ if df is None or len(df) < 100:  # 営業日100日分あればOK（最低限の�
 
 ---
 
+## 🛠️ **Fix S + Fix T: フロントエンドタイムゾーン対応とスクイーズ継続期間フィルター削除（2026年2月4日）**
+
+### Fix S: フロントエンドJSTタイムゾーン対応
+
+**問題:**
+- 現在日本時間2時（2月4日 02:00 JST）
+- まだ4日の相場は始まっていない（16時以降に当日データ）
+- 正しくは「2月3日」と表示すべきだが、「2月4日」と表示されていた
+
+**修正内容（コミット: `1dbace9`）:**
+
+**ファイル:** `templates/index_new.html`
+
+1. JST取引日取得関数を追加（Line 458-477）
+
+```javascript
+// JST（日本時間）で取引日を取得する関数
+// 16:00前は前日、16:00以降は当日を返す
+function getJSTTradingDate() {
+    const now = new Date();
+    const jstOffset = 9 * 60; // 9時間 = 540分
+    const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+    const jstHour = jstTime.getUTCHours();
+    
+    // 16:00前は前日、16:00以降は当日
+    if (jstHour < 16) {
+        jstTime.setUTCDate(jstTime.getUTCDate() - 1);
+    }
+    
+    return jstTime;
+}
+```
+
+2. 4つの手法のスクリーニング結果表示を修正（Line 712-714）
+
+```javascript
+// JST取引日を取得（16:00前は前日、16:00以降は当日）
+const tradingDate = getJSTTradingDate();
+const dateStr = `${tradingDate.getUTCFullYear()}年${tradingDate.getUTCMonth() + 1}月${tradingDate.getUTCDate()}日`;
+```
+
+**効果:**
+- ✅ バックエンドとフロントエンドの日付表示が完全に統一
+- ✅ JST 16時前は前日、JST 16時以降は当日を正しく表示
+
+---
+
+### Fix T: スクイーズ継続期間フィルター削除
+
+**背景:**
+ユーザーからのフィードバックにより、スクイーズスクリーニングの継続期間フィルター（7日以上）が不要と判明。
+
+**修正内容（コミット: `3743fc8` + 追加修正）:**
+
+**ファイル:** `daily_data_collection.py`
+
+#### 1. 継続期間パラメータ削除（Line 1082-1086）
+
+**変更前:**
+```python
+bbw_threshold = 1.2
+deviation_threshold = 3.0
+atr_threshold = 1.3
+min_duration = 7  # 継続期間
+```
+
+**変更後:**
+```python
+bbw_threshold = 1.2
+deviation_threshold = 3.0
+atr_threshold = 1.3
+# min_duration 削除
+```
+
+#### 2. 継続日数計算とフィルター削除（Line 1110-1128）
+
+**変更前:**
+```python
+# 継続日数を計算
+duration = 0
+for i in range(1, min(len(prices), 30)):
+    idx = -i
+    if (bbw.iloc[idx] <= bbw_min_60d * bbw_threshold and
+        deviation.iloc[idx] <= deviation_threshold * 1.4 and
+        atr.iloc[idx] <= atr_min_60d * atr_threshold):
+        duration += 1
+    else:
+        break
+
+# 最小継続期間を満たすか確認
+if duration < min_duration:
+    self.squeeze_stats['duration_failed'] += 1
+    return None
+
+self.squeeze_stats['passed_all'] += 1
+logger.info(f"✅ スクイーズ検出 [{code}]: 継続{duration}日")
+```
+
+**変更後:**
+```python
+# 継続日数計算とフィルターを完全削除
+
+self.squeeze_stats['passed_all'] += 1
+logger.info(f"✅ スクイーズ検出 [{code}]")
+```
+
+#### 3. `duration_days`フィールド削除（Line 1143, 1365）
+
+- 検出結果の返却値から`"duration_days": int(duration)`を削除
+- Supabase保存時の`additional_data`から`"duration_days": s["duration_days"]`を削除
+
+#### 4. 統計情報から`duration_failed`削除（Line 999-1006）
+
+**変更前:**
+```python
+self.squeeze_stats = {
+    'total': 0,
+    'has_data': 0,
+    'bbw_failed': 0,
+    'deviation_failed': 0,
+    'atr_failed': 0,
+    'duration_failed': 0,
+    'passed_all': 0
+}
+```
+
+**変更後:**
+```python
+self.squeeze_stats = {
+    'total': 0,
+    'has_data': 0,
+    'bbw_failed': 0,
+    'deviation_failed': 0,
+    'atr_failed': 0,
+    'passed_all': 0
+}
+```
+
+**効果:**
+- ✅ 継続期間による除外がなくなり、より多くの銀柄が検出される
+- ✅ BBW、乖離率、ATRの3つの条件のみで判定
+- ✅ 予想検出数: 20-25銀柄 → **30-40銀柄程度**（増加）
+
+---
+
+### パーフェクトオーダーについて
+
+**確認結果:**
+- ✅ パーフェクトオーダーには継続期間フィルターは実装されていません
+- ✅ 修正不要
+
+---
+
 **次回更新予定:** 30日後、データ取得率の向上を確認時
 
-**作成日時:** 2026年2月2日 23:00  
-**ステータス:** Fix Q・Fix R実装完了、4つのスクリーニング全て正常動作
+**作成日時:** 2026年2月4日 02:30  
+**ステータス:** Fix Q・Fix R・Fix S・Fix T実装完了、4つのスクリーニング全て正常動作
