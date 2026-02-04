@@ -427,16 +427,9 @@
                 </div>
             </div>
             
-            <!-- スクイーズ専用オプション -->
+            <!-- スクイーズ専用オプション（現在なし） -->
             <div class="option-group" id="squeezeOptions" style="display: none;">
-                <label class="option-label">継続期間フィルター</label>
-                <select class="option-select" id="durationFilter">
-                    <option value="all">全て</option>
-                    <option value="1week">1週間以内（1-7日）</option>
-                    <option value="1-2weeks">1週間～2週間（8-14日）</option>
-                    <option value="2weeks-1month">2週間～1か月（15-30日）</option>
-                    <option value="1month+">1か月以上（31日以上）</option>
-                </select>
+                <!-- 継続期間フィルターを削除（Fix T） -->
             </div>
         </div>
         
@@ -684,9 +677,10 @@
                     }
                     
                     // スクイーズの場合、オプションを追加
-                    if (selectedMethod === 'squeeze') {
-                        options.duration_filter = document.getElementById('durationFilter').value;
-                    }
+                    // 継続期間フィルター削除（Fix T）
+                    // if (selectedMethod === 'squeeze') {
+                    //     options.duration_filter = document.getElementById('durationFilter').value;
+                    // }
                     
                     // スクリーニング実行
                     const response = await fetch('/api/screening', {
