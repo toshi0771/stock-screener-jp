@@ -340,7 +340,7 @@
             <h1>株式スクリーニング</h1>
             <p class="subtitle">スイングトレード上昇銘柄を4つの手法で一発検索</p>
             <p style="color: #d9534f; font-size: 14px; margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
-                <strong>ご注意：</strong>スクリーニングは只今データ取得に時間を要するため翌日早朝4時以降にご利用ください。
+                <strong>ご注意：</strong>スクリーニングは只今データ取得に時間を要するため夜8時以降にご利用ください。
             </p>
         </header>
         
@@ -427,16 +427,9 @@
                 </div>
             </div>
             
-            <!-- スクイーズ専用オプション -->
+            <!-- スクイーズ専用オプション（現在なし） -->
             <div class="option-group" id="squeezeOptions" style="display: none;">
-                <label class="option-label">継続期間フィルター</label>
-                <select class="option-select" id="durationFilter">
-                    <option value="all">全て</option>
-                    <option value="1week">1週間以内（1-7日）</option>
-                    <option value="1-2weeks">1週間～2週間（8-14日）</option>
-                    <option value="2weeks-1month">2週間～1か月（15-30日）</option>
-                    <option value="1month+">1か月以上（31日以上）</option>
-                </select>
+                <!-- 継続期間フィルターを削除（Fix T） -->
             </div>
         </div>
         
@@ -454,6 +447,27 @@
     
     <script>
         let selectedMethod = null;
+        
+        // JST（日本時間）で取引日を取得する関数
+        // 16:00前は前日、16:00以降は当日を返す
+        function getJSTTradingDate() {
+            // 現在のUTC時刻を取得
+            const now = new Date();
+            
+            // JSTに変換（UTC+9時間）
+            const jstOffset = 9 * 60; // 9時間 = 540分
+            const jstTime = new Date(now.getTime() + jstOffset * 60 * 1000);
+            
+            // JST時刻を取得
+            const jstHour = jstTime.getUTCHours(); // UTCメソッドを使ってJST時刻を取得
+            
+            // 16:00前は前日、16:00以降は当日
+            if (jstHour < 16) {
+                jstTime.setUTCDate(jstTime.getUTCDate() - 1);
+            }
+            
+            return jstTime;
+        }
         
         // ストキャスティクストグルの動作
         document.getElementById('stochasticToggle').addEventListener('change', function() {
@@ -663,9 +677,10 @@
                     }
                     
                     // スクイーズの場合、オプションを追加
-                    if (selectedMethod === 'squeeze') {
-                        options.duration_filter = document.getElementById('durationFilter').value;
-                    }
+                    // 継続期間フィルター削除（Fix T）
+                    // if (selectedMethod === 'squeeze') {
+                    //     options.duration_filter = document.getElementById('durationFilter').value;
+                    // }
                     
                     // スクリーニング実行
                     const response = await fetch('/api/screening', {
@@ -688,9 +703,9 @@
                         'squeeze': 'スクイーズ（価格収縮）'
                     };
                     
-                    // 現在の日付を取得
-                    const today = new Date();
-                    const dateStr = `${today.getFullYear()}年${today.getMonth() + 1}月${today.getDate()}日`;
+                    // JST取引日を取得（16:00前は前日、16:00以降は当日）
+                    const tradingDate = getJSTTradingDate();
+                    const dateStr = `${tradingDate.getUTCFullYear()}年${tradingDate.getUTCMonth() + 1}月${tradingDate.getUTCDate()}日`;
                     resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出（${dateStr}）`;
                     
                     if (data.success && data.results.length > 0) {
