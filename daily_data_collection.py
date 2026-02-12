@@ -661,6 +661,8 @@ class StockScreener:
                 "data_insufficient": 0,
                 "passed_perfect_order": 0,
                 "passed_divergence": 0,
+                "passed_price_increase": 0,
+                "passed_volume_increase": 0,
                 "final_detected": 0
             }
         
@@ -721,6 +723,35 @@ class StockScreener:
                 return None
             
             self.perfect_order_stats["passed_divergence"] += 1
+            
+            # 1か月（約20営業日）前の価格を取得
+            if len(df) < 20:
+                logger.debug(f"[{code}] 1か月分のデータ不足: {len(df)}行 < 20行")
+                return None
+            
+            price_1month_ago = df.iloc[-20]['Close']
+            current_price = latest['Close']
+            
+            # 価格上昇率フィルター: 1か月で10%以上上昇
+            price_increase_pct = ((current_price - price_1month_ago) / price_1month_ago) * 100
+            if price_increase_pct < 10:
+                logger.debug(f"[{code}] 価格上昇率不足: {price_increase_pct:.2f}% < 10%")
+                return None
+            
+            self.perfect_order_stats["passed_price_increase"] += 1
+            
+            # 相対出来高（RV）フィルター: 1か月平均の3倍以上
+            # 1か月（約20営業日）の平均出来高を計算
+            avg_volume_1month = df.iloc[-20:]['Volume'].mean()
+            current_volume = latest['Volume']
+            
+            # 相対出来高倍率
+            rv_ratio = current_volume / avg_volume_1month if avg_volume_1month > 0 else 0
+            if rv_ratio < 3.0:
+                logger.debug(f"[{code}] 相対出来高不足: {rv_ratio:.2f}倍 < 3.0倍")
+                return None
+            
+            self.perfect_order_stats["passed_volume_increase"] += 1
             self.perfect_order_stats["final_detected"] += 1
             
             return {
@@ -731,7 +762,9 @@ class StockScreener:
                 "ema20": float(latest['EMA20']),
                 "ema50": float(latest['EMA50']),
                 "market": self._market_code_to_name(market),
-                "volume": int(latest.get('Volume', 0))
+                "volume": int(latest.get('Volume', 0)),
+                "price_increase_pct": round(price_increase_pct, 2),
+                "rv_ratio": round(rv_ratio, 2)
             }
             
         except Exception as e:
