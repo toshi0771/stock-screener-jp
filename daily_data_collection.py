@@ -679,6 +679,13 @@ class StockScreener:
             # 永続キャッシュから取得を試みる（100日分のデータが必要）
             df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=120)
             
+            # 🔍 デバッグログ追加（最初の5件のみ）
+            if self.perfect_order_stats.get('cache_calls', 0) < 5:
+                logger.info(f"🔍 DEBUG [{code}]: persistent_cache.get() → df={'取得成功' if df is not None else 'None'}")
+                if df is not None:
+                    logger.info(f"🔍 DEBUG [{code}]: df.shape={df.shape}, columns={list(df.columns)[:5]}")
+            self.perfect_order_stats['cache_calls'] = self.perfect_order_stats.get('cache_calls', 0) + 1
+            
             # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
             if df is None:
                 df = await self.cache.get_or_fetch(
@@ -691,12 +698,23 @@ class StockScreener:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
             if df is None:
+                # 🔍 デバッグログ追加
+                if self.perfect_order_stats.get('df_none_count', 0) < 5:
+                    logger.info(f"🔍 DEBUG [{code}]: df is None (persistent_cache.get + API failed)")
+                self.perfect_order_stats['df_none_count'] = self.perfect_order_stats.get('df_none_count', 0) + 1
                 return None
+            
+            # 🔍 デバッグログ追加（最初の5件のみ）
+            if self.perfect_order_stats['has_data'] < 5:
+                logger.info(f"🔍 DEBUG [{code}]: df取得成功 - 行数={len(df)}")
             
             self.perfect_order_stats["has_data"] += 1
             
             if len(df) < 50:
                 self.perfect_order_stats["data_insufficient"] += 1
+                # 🔍 デバッグログ追加（最初の5件のみ）
+                if self.perfect_order_stats['data_insufficient'] < 5:
+                    logger.info(f"🔍 DEBUG [{code}]: データ不足 - {len(df)}行 < 50行")
                 logger.debug(f"[{code}] データ不足: {len(df)}行 < 50行")
                 return None
             

@@ -1,8 +1,124 @@
 # 日本株スクリーニングシステム - 現在の状況
 
-**最終更新:** 2026年2月19日 13:30 (Fix W: 日付チェック無効化で検出復活)  
+**最終更新:** 2026年2月20日 01:10 (Fix X: デバッグログ追加)  
 **プロジェクト:** 日本株スクリーニングシステム（J-Quants API使用）  
 **総コミット数:** 135個以上
+
+---
+
+## 🔍 **Fix X: デバッグログ追加（2026年2月20日）**
+
+### 問題
+
+**Fix Wで日付チェックを無効化したが、まだ検出0銘柄**
+
+GitHub Actionsログ（2月1９日実行）：
+```
+パーフェクトオーダー: 3200/3777 処理完了 (0銘柄検出)
+ボリンジャーバンド: 3200/3777 処理完了 (0銘柄検出)
+200日新高値押し目: データ取得成功 0.0% (0銘柄検出)
+
+永続キャッシュ統計:
+  ヒット数: 0回  ← 異常
+  ミス数: 0回
+  ヒット率: 0%
+```
+
+### 原因仮説
+
+1. **persistent_cache.get()がNoneを返している**
+   - キャッシュファイルが存在しない
+   - またはmax_age_daysで除外されている
+
+2. **len(df) < 50で除外されている**
+   - キャッシュにデータはあるが行数が不足
+
+3. **データ取得期間が長すぎる**
+   - 100日分を要求しているがキャッシュには50日分しかない
+
+### 修正内容
+
+**コミット:** （本コミット）
+
+**ファイル:** `daily_data_collection.py`
+
+`screen_stock_perfect_order`メソッドにデバッグログを追加：
+
+#### 1. persistent_cache.get()の結果をログ出力 (Line 682-687)
+
+```python
+# 🔍 デバッグログ追加（最初の5件のみ）
+if self.perfect_order_stats.get('cache_calls', 0) < 5:
+    logger.info(f"🔍 DEBUG [{code}]: persistent_cache.get() → df={'取得成功' if df is not None else 'None'}")
+    if df is not None:
+        logger.info(f"🔍 DEBUG [{code}]: df.shape={df.shape}, columns={list(df.columns)[:5]}")
+self.perfect_order_stats['cache_calls'] = self.perfect_order_stats.get('cache_calls', 0) + 1
+```
+
+#### 2. df is Noneの場合をログ出力 (Line 700-705)
+
+```python
+if df is None:
+    # 🔍 デバッグログ追加
+    if self.perfect_order_stats.get('df_none_count', 0) < 5:
+        logger.info(f"🔍 DEBUG [{code}]: df is None (persistent_cache.get + API failed)")
+    self.perfect_order_stats['df_none_count'] = self.perfect_order_stats.get('df_none_count', 0) + 1
+    return None
+```
+
+#### 3. df取得成功時の行数をログ出力 (Line 707-711)
+
+```python
+# 🔍 デバッグログ追加（最初の5件のみ）
+if self.perfect_order_stats['has_data'] < 5:
+    logger.info(f"🔍 DEBUG [{code}]: df取得成功 - 行数={len(df)}")
+
+self.perfect_order_stats["has_data"] += 1
+```
+
+#### 4. データ不足の詳細をログ出力 (Line 713-719)
+
+```python
+if len(df) < 50:
+    self.perfect_order_stats["data_insufficient"] += 1
+    # 🔍 デバッグログ追加（最初の5件のみ）
+    if self.perfect_order_stats['data_insufficient'] < 5:
+        logger.info(f"🔍 DEBUG [{code}]: データ不足 - {len(df)}行 < 50行")
+    logger.debug(f"[{code}] データ不足: {len(df)}行 < 50行")
+    return None
+```
+
+### 期待されるログ出力
+
+次回GitHub Actions実行で以下のようなログが出力されるはず：
+
+```
+🔍 DEBUG [1301]: persistent_cache.get() → df=取得成功
+🔍 DEBUG [1301]: df.shape=(120, 15), columns=['Date', 'Open', 'High', 'Low', 'Close']
+🔍 DEBUG [1301]: df取得成功 - 行数=120
+```
+
+または
+
+```
+🔍 DEBUG [1301]: persistent_cache.get() → df=None
+🔍 DEBUG [1301]: df is None (persistent_cache.get + API failed)
+```
+
+または
+
+```
+🔍 DEBUG [1301]: persistent_cache.get() → df=取得成功
+🔍 DEBUG [1301]: df.shape=(30, 15), columns=['Date', 'Open', 'High', 'Low', 'Close']
+🔍 DEBUG [1301]: df取得成功 - 行数=30
+🔍 DEBUG [1301]: データ不足 - 30行 < 50行
+```
+
+### 次のアクション
+
+1. 次回GitHub Actions実行のログを確認
+2. `🔍 DEBUG`で始まるログを探す
+3. 原因を特定して最終的な修正を適用
 
 ---
 
