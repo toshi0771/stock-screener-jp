@@ -710,12 +710,12 @@ class StockScreener:
             
             self.perfect_order_stats["has_data"] += 1
             
-            if len(df) < 50:
+            if len(df) < 20:
                 self.perfect_order_stats["data_insufficient"] += 1
                 # 🔍 デバッグログ追加（最初の5件のみ）
                 if self.perfect_order_stats['data_insufficient'] < 5:
-                    logger.info(f"🔍 DEBUG [{code}]: データ不足 - {len(df)}行 < 50行")
-                logger.debug(f"[{code}] データ不足: {len(df)}行 < 50行")
+                    logger.info(f"🔍 DEBUG [{code}]: データ不足 - {len(df)}行 < 20行")
+                logger.debug(f"[{code}] データ不足: {len(df)}行 < 20行")
                 return None
             
             # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
@@ -933,7 +933,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 100:  # 営業日100日分あればOK（最低限の判定可能）
+            if df is None or len(df) < 50:  # 営業日50日分あればOK（最低限の判定可能）
                 return None
             
             # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
@@ -1116,7 +1116,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 100:
+            if df is None or len(df) < 50:
                 return None
             
             # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
