@@ -933,7 +933,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 50:  # 営業日50日分あればOK（最低限の判定可能）
+            if df is None or len(df) < 20:  # 営業日20日分あればOK（最低限の判定可能）
                 return None
             
             # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
@@ -1116,7 +1116,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
             
-            if df is None or len(df) < 50:
+            if df is None or len(df) < 20:
                 return None
             
             # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
