@@ -65,8 +65,8 @@ async def main():
         bb_time = int((datetime.now() - bb_start).total_seconds() * 1000)
         logger.info(f"✅ ボリンジャーバンド検出: {len(bollinger_band)}銘柄 ({bb_time}ms)")
         
-        # 🔧 FIX: 既に取得済みなので再取得不要
-        target_date = screener.latest_trading_date
+        # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）
+        target_date = screener.latest_trading_date.strftime('%Y-%m-%d')
         logger.info(f"📅 最新取引日（保存用）: {target_date}")
         
         # 間引き処理

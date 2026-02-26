@@ -72,8 +72,8 @@ async def main():
         po_time = int((datetime.now() - po_start).total_seconds() * 1000)
         logger.info(f"✅ パーフェクトオーダー検出: {len(perfect_order)}銘柄 ({po_time}ms)")
         
-        # 🔧 FIX: 既に取得済みなので再取得不要
-        target_date = screener.latest_trading_date
+        # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）
+        target_date = screener.latest_trading_date.strftime('%Y-%m-%d')
         logger.info(f"📅 最新取引日（保存用）: {target_date}")
         
         # 間引き処理

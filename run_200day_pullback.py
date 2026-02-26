@@ -71,8 +71,8 @@ async def main():
         pb_time = int((datetime.now() - pb_start).total_seconds() * 1000)
         logger.info(f"✅ 200日新高値押し目検出: {len(week52_pullback)}銘柄 ({pb_time}ms)")
         
-        # 🔧 FIX: 既に取得済みなので再取得不要
-        target_date = screener.latest_trading_date
+        # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）
+        target_date = screener.latest_trading_date.strftime('%Y-%m-%d')
         logger.info(f"📅 最新取引日（保存用）: {target_date}")
         
         # 統計情報を表示

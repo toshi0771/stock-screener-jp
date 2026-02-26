@@ -79,9 +79,9 @@ async def main():
             logger.info(f"  最終検出数: {stats['passed_all']}銘柄")
             logger.info("="*80)
         
-        # 🔧 FIX: 既に取得済みなので再取得不要
-        target_date = screener.latest_trading_date
-        logger.info(f"📅 最新取得日（保存用）: {target_date}")
+        # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）
+        target_date = screener.latest_trading_date.strftime('%Y-%m-%d')
+        logger.info(f"📅 最新取引日（保存用）: {target_date}")
         
         # 間引き処理
         squeeze_sampled = sample_stocks_balanced(squeeze, max_per_range=10)
