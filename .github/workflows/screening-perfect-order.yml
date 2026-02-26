@@ -28,9 +28,9 @@ jobs:
       uses: actions/cache/restore@v4
       with:
         path: ~/.cache/stock_prices
-        key: stock-prices-cache-${{ github.run_id }}
+        key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
         restore-keys: |
-          stock-prices-cache-
+          stock-prices-cache-${{ runner.os }}-
     
     - name: Install dependencies
       run: |
@@ -52,4 +52,4 @@ jobs:
       if: always()
       with:
         path: ~/.cache/stock_prices
-        key: stock-prices-cache-${{ github.run_id }}
+        key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}

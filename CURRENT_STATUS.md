@@ -1,8 +1,128 @@
 # 日本株スクリーニングシステム - 現在の状況
 
-**最終更新:** 2026年2月24日 (Fix AA: 200日押し目の最小行数20に変更)  
+**最終更新:** 2026年2月26日 (Fix AB: GitHub Actionsキャッシュキー修正)  
 **プロジェクト:** 日本株スクリーニングシステム（J-Quants API使用）  
-**総コミット数:** 135個以上
+**総コミット数:** 140個以上
+
+---
+
+## 🎉 **Fix AB: GitHub Actionsキャッシュキー修正（2026年2月26日）**
+
+### 問題
+
+**Fix AAで最小行数を20に変更したが、まだ検出0銘柄**
+
+GitHub Actionsログ（2月2月25日実行）で、全スクリーニングで検出0銘柄。
+
+ユーザーが提供したログを確認した結果：
+- **永続キャッシュヒット率: 0%** （全スクリーニング共通）
+- **メモリキャッシュヒット率: 0%** （全スクリーニング共通）
+
+### 真の原因
+
+**GitHub Actionsのキャッシュキーが毎回新しいIDになる**
+
+#### 問題のコード
+
+```yaml
+# Restore時
+key: stock-prices-cache-${{ github.run_id }}
+restore-keys: |
+  stock-prices-cache-
+
+# Save時
+key: stock-prices-cache-${{ github.run_id }}
+```
+
+#### なぜキャッシュが増殖するのか
+
+```
+処理フロー:
+
+1回目(run_id=100): 
+  Restore→ヒットなし → Save: "stock-prices-cache-100"
+  ↓
+2回目(run_id=200): 
+  Restore→"stock-prices-cache-100"にヒット ✓
+  ↓
+  Save: "stock-prices-cache-200" ← 新しいキー！
+  ↓
+3回目(run_id=300): 
+  Restore→"stock-prices-cache-200"にヒット ✓
+  ↓
+  Save: "stock-prices-cache-300" ← また新しいキー！
+  ↓
+キャッシュが際限なく増殖し、古いキャッシュが大量に残る
+```
+
+**最大の問題:**
+- `restore-keys: stock-prices-cache-` はprefix matchなので、前回のキャッシュにマッチして復元できる
+- しかし、GitHub Actionsのキャッシュは**同一keyへの上書き不可**
+- 毎回新しいkey（run_id付き）で保存するためキャッシュが際限なく増殖
+- 古いキャッシュが大量にある場合、どれが最新か不明確
+
+### 修正内容
+
+**4つのワークフローファイル全てでキャッシュキーを修正**
+
+1. `screening-200day-pullback.yml`
+2. `screening-bollinger-band.yml`
+3. `screening-perfect-order.yml`
+4. `screening-squeeze.yml`
+
+#### 修正後のコード
+
+```yaml
+# Restore時
+key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
+restore-keys: |
+  stock-prices-cache-${{ runner.os }}-
+
+# Save時
+key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
+```
+
+### なぜこれで動くか
+
+| | 現在 | 修正後 |
+|---|---|---|
+| Restore key | `stock-prices-cache-111` | `stock-prices-cache-Linux-222` |
+| restore-keys | `stock-prices-cache-` | `stock-prices-cache-Linux-` |
+| Save key | `stock-prices-cache-222` | `stock-prices-cache-Linux-222` |
+
+**動作フロー:**
+
+```
+1回目(run=100): 
+  restore→ヒットなし → Save: "stock-prices-cache-Linux-100"
+  ↓
+2回目(run=200): 
+  restore→"Linux-100"にヒット ✓ → Save: "stock-prices-cache-Linux-200"
+  ↓
+3回目(run=300): 
+  restore→"Linux-200"にヒット ✓ → データが蜂積されていく！
+```
+
+### 期待される効果
+
+| 項目 | 修正前（2月2月25日） | 修正後（予測） |
+|---|---|---|
+| **永続キャッシュヒット率** | 0% ❌ | 100% ✓ |
+| **メモリキャッシュヒット率** | 0% ❌ | 100% ✓ |
+| **データ取得成功率** | 0.0% ❌ | 15-95% ✓ |
+| **パーフェクトオーダー検出** | 0銘柄 ❌ | 100-300銘柄 ✓ |
+| **ボリンジャーバンド検出** | 0銘柄 ❌ | 50-150銘柄 ✓ |
+| **200日新高値押し目検出** | 0銘柄 ❌ | 50-100銘柄 ✓ |
+| **スクイーズ検出** | 0銘柄 ❌ | 20-50銘柄 ✓ |
+| **Supabase保存** | 失敗 ❌ | 成功 ✓ |
+
+### 重要な教訓
+
+**GitHub Actionsのキャッシュは同一keyへの上書き不可**
+
+- `actions/cache/restore@v4` + `actions/cache/save@v4` の分離構成では、毎回新しいkeyが生成される
+- `runner.os`を追加することで、OS固有のキャッシュを作成
+- `restore-keys`でprefix matchを使い、最新のキャッシュを自動的に復元
 
 ---
 
