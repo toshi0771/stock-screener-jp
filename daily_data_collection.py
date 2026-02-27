@@ -760,23 +760,23 @@ class StockScreener:
             price_1month_ago = df.iloc[-20]['Close']
             current_price = latest['Close']
             
-            # 価格上昇率フィルター: 1か月で10%以上上昇
+            # 価格上昇率フィルター: 1か月で5%以上上昇（日本株向けに緩和: 10% → 5%）
             price_increase_pct = ((current_price - price_1month_ago) / price_1month_ago) * 100
-            if price_increase_pct < 10:
-                logger.debug(f"[{code}] 価格上昇率不足: {price_increase_pct:.2f}% < 10%")
+            if price_increase_pct < 5:
+                logger.debug(f"[{code}] 価格上昇率不足: {price_increase_pct:.2f}% < 5%")
                 return None
             
             self.perfect_order_stats["passed_price_increase"] += 1
             
-            # 相対出来高（RV）フィルター: 1か月平均の3倍以上
+            # 相対出来高（RV）フィルター: 1か月平均の1.5倍以上（日本株向けに緩和: 3.0倍 → 1.5倍）
             # 1か月（約20営業日）の平均出来高を計算
             avg_volume_1month = df.iloc[-20:]['Volume'].mean()
             current_volume = latest['Volume']
             
             # 相対出来高倍率
             rv_ratio = current_volume / avg_volume_1month if avg_volume_1month > 0 else 0
-            if rv_ratio < 3.0:
-                logger.debug(f"[{code}] 相対出来高不足: {rv_ratio:.2f}倍 < 3.0倍")
+            if rv_ratio < 1.5:
+                logger.debug(f"[{code}] 相対出来高不足: {rv_ratio:.2f}倍 < 1.5倍")
                 return None
             
             self.perfect_order_stats["passed_volume_increase"] += 1
