@@ -42,13 +42,14 @@ def get_latest_screening_results(screening_type, market='all'):
         # 最新のスクリーニング結果を取得（過去30日以内、フィルター条件を緩和）
         thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
         
-        # screening_resultsテーブルから最新の結果IDを取得（total_stocks_found > 0のみ）
+        # screening_resultsテーブルから最新の結果イドを取得（total_stocks_found > 0のみ）
+        # created_atで降順ソートすることで、同日複数回実行時も最新を正しく取得
         query = supabase.table('screening_results')\
-            .select('id, screening_date, total_stocks_found, market_filter')\
+            .select('id, screening_date, total_stocks_found, market_filter, created_at')\
             .eq('screening_type', screening_type)\
             .gt('total_stocks_found', 0)\
             .gte('screening_date', thirty_days_ago)\
-            .order('screening_date', desc=True)\
+            .order('created_at', desc=True)\
             .limit(10)
         
         screening_results = query.execute()
