@@ -25,8 +25,8 @@ from trading_day_helper import get_latest_trading_day, get_date_range_for_screen
 # スクリーニングオプション設定
 # ============================================================
 
-# パーフェクトオーダーオプション
-# PERFECT_ORDER_SMA200_FILTER = "all"  # 削除済み
+# ブレイクアウト（持ち合い上放れ）オプション
+# BREAKOUT_BOX_WIDTH_PCT = 15  # ボックス幅の最大値（%）
 
 # 200日新高値押し目オプション
 PULLBACK_EMA_FILTER = "all"  # "10ema", "20ema", "50ema", "all" (いずれか)
@@ -645,156 +645,140 @@ class StockScreener:
             market_codes = {"0111": "プライム", "0112": "スタンダード", "0113": "グロース"}
             return [s for s in all_stocks_data if s.get(market_field) in market_codes]
 
-    async def screen_stock_perfect_order(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄のパーフェクトオーダースクリーニング"""
-        code = stock["Code"]
-        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
-        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
-        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
-        market = stock.get("Mkt", stock.get("MarketCode", ""))
+    async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
+        """単一銘柄のボックスブレイク（持ち合い上放れ）スクリーニング
         
+        ハブ(3030)のような長期持ち合い後の急上昇銘柄を検出する。
+        検出条件:
+          1. 直近60営業日の値動きがボックス幅15%以内（持ち合い確認）
+          2. 直近5営業日以内に60日高値を更新（上放れ確認）
+          3. 直近出来高が過去60日平均の1.5倍以上（出来高急増確認）
+          4. 現在株価がEMA50より上（トレンド転換確認）
+        """
+        code = stock["Code"]
+        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
+        market = stock.get("Mkt", stock.get("MarketCode", ""))
+
         # 統計情報を初期化（初回のみ）
         if not hasattr(self, 'perfect_order_stats'):
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
                 "data_insufficient": 0,
-                "passed_perfect_order": 0,
-                "passed_divergence": 0,
-                "passed_price_increase": 0,
-                "passed_volume_increase": 0,
+                "passed_box": 0,       # ボックス幅条件通過
+                "passed_breakout": 0,  # 高値ブレイク条件通過
+                "passed_volume": 0,    # 出来高条件通過
+                "passed_ema": 0,       # EMA50条件通過
                 "final_detected": 0
             }
-        
+
         self.perfect_order_stats["total"] += 1
-        
+
         try:
-            # 株価データ取得
-            # キャッシュされた最新の取引日を使用
             end_date = self.latest_trading_date
-            
-            # 日付範囲を取得（100日分、200SMAフィルター削除により短縮）
+
+            # 60営業日 + バッファのため約100日分取得
             start_str, end_str = get_date_range_for_screening(end_date, 100)
-            
-            # 永続キャッシュから取得を試みる（100日分のデータが必要）
+
+            # 永続キャッシュから取得
             df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=120)
-            
-            # 🔍 デバッグログ追加（最初の5件のみ）
-            if self.perfect_order_stats.get('cache_calls', 0) < 5:
-                logger.info(f"🔍 DEBUG [{code}]: persistent_cache.get() → df={'取得成功' if df is not None else 'None'}")
-                if df is not None:
-                    logger.info(f"🔍 DEBUG [{code}]: df.shape={df.shape}, columns={list(df.columns)[:5]}")
-            self.perfect_order_stats['cache_calls'] = self.perfect_order_stats.get('cache_calls', 0) + 1
-            
-            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
+
             if df is None:
                 df = await self.cache.get_or_fetch(
                     code, start_str, end_str,
                     self.jq_client.get_prices_daily_quotes,
                     session, code, start_str, end_str
                 )
-                # 取得したデータを永続キャッシュに保存
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
-            
-            if df is None:
-                # 🔍 デバッグログ追加
-                if self.perfect_order_stats.get('df_none_count', 0) < 5:
-                    logger.info(f"🔍 DEBUG [{code}]: df is None (persistent_cache.get + API failed)")
-                self.perfect_order_stats['df_none_count'] = self.perfect_order_stats.get('df_none_count', 0) + 1
+
+            if df is None or len(df) < 30:
                 return None
-            
-            # 🔍 デバッグログ追加（最初の5件のみ）
-            if self.perfect_order_stats['has_data'] < 5:
-                logger.info(f"🔍 DEBUG [{code}]: df取得成功 - 行数={len(df)}")
-            
+
             self.perfect_order_stats["has_data"] += 1
-            
-            if len(df) < 20:
-                self.perfect_order_stats["data_insufficient"] += 1
-                # 🔍 デバッグログ追加（最初の5件のみ）
-                if self.perfect_order_stats['data_insufficient'] < 5:
-                    logger.info(f"🔍 DEBUG [{code}]: データ不足 - {len(df)}行 < 20行")
-                logger.debug(f"[{code}] データ不足: {len(df)}行 < 20行")
-                return None
-            
-            # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
-            # latest = df.iloc[-1]
-            # latest_data_date = pd.to_datetime(latest['Date']).date()
-            # end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            # 
-            # # キャッシュの最新データが実行日より3日以上古い場合は除外
-            # if (end_date_obj - latest_data_date).days > 3:
-            #     logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
-            #     return None
-            
-            # EMA計算
-            df['EMA10'] = self.calculate_ema(df['Close'], 10)
-            df['EMA20'] = self.calculate_ema(df['Close'], 20)
-            df['EMA50'] = self.calculate_ema(df['Close'], 50)
-            
+
+            # 直近60営業日分（足りない場合は全データ）を使用
+            lookback = min(60, len(df))
+            df_box = df.iloc[-lookback:].copy()
             latest = df.iloc[-1]
-            
-            # パーフェクトオーダー判定
-            perfect_order_check = (latest['Close'] >= latest['EMA10'] >= 
-                                   latest['EMA20'] >= latest['EMA50'])
-            if not perfect_order_check:
-                logger.debug(f"[{code}] パーフェクトオーダー不成立: Close={latest['Close']:.2f}, EMA10={latest['EMA10']:.2f}, EMA20={latest['EMA20']:.2f}, EMA50={latest['EMA50']:.2f}")
+            current_price = float(latest['Close'])
+            current_volume = float(latest.get('Volume', 0))
+
+            # ── 条件1: ボックス幅チェック（持ち合い確認）──────────────────
+            # ブレイク直前の持ち合いを確認するため、直近5日を除いた期間で判定
+            df_range = df.iloc[-(lookback):-5] if len(df) > (lookback + 5) else df.iloc[:-5]
+            if len(df_range) < 10:
                 return None
-            
-            self.perfect_order_stats["passed_perfect_order"] += 1
-            
-            # 乖離率フィルター: (株価 - 50EMA) / 株価 <= 20%
-            divergence_pct = ((latest['Close'] - latest['EMA50']) / latest['Close']) * 100
-            if divergence_pct > 20:
-                logger.debug(f"[{code}] 乖離率超過: {divergence_pct:.2f}% > 20%")
+
+            box_high = float(df_range['High'].max())
+            box_low = float(df_range['Low'].min())
+            if box_low <= 0:
                 return None
-            
-            self.perfect_order_stats["passed_divergence"] += 1
-            
-            # 1か月（約20営業日）前の価格を取得
-            if len(df) < 20:
-                logger.debug(f"[{code}] 1か月分のデータ不足: {len(df)}行 < 20行")
+
+            box_width_pct = (box_high - box_low) / box_low * 100
+
+            # ボックス幅が15%超 → 持ち合いではなくトレンド相場とみなしてスキップ
+            if box_width_pct > 15:
+                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 15%")
                 return None
-            
-            price_1month_ago = df.iloc[-20]['Close']
-            current_price = latest['Close']
-            
-            # 価格上昇率フィルター: 1か月で5%以上上昇（日本株向けに緩和: 10% → 5%）
-            price_increase_pct = ((current_price - price_1month_ago) / price_1month_ago) * 100
-            if price_increase_pct < 5:
-                logger.debug(f"[{code}] 価格上昇率不足: {price_increase_pct:.2f}% < 5%")
+
+            self.perfect_order_stats["passed_box"] += 1
+
+            # ── 条件2: 高値ブレイクアウト確認（直近5日以内）──────────────
+            recent_high = float(df.iloc[-5:]['High'].max())
+            if recent_high <= box_high:
+                logger.debug(f"[{code}] ブレイクなし: 直近高値={recent_high:.0f} <= ボックス高値={box_high:.0f}")
                 return None
-            
-            self.perfect_order_stats["passed_price_increase"] += 1
-            
-            # 相対出来高（RV）フィルター: 1か月平均の1.5倍以上（日本株向けに緩和: 3.0倍 → 1.5倍）
-            # 1か月（約20営業日）の平均出来高を計算
-            avg_volume_1month = df.iloc[-20:]['Volume'].mean()
-            current_volume = latest['Volume']
-            
-            # 相対出来高倍率
-            rv_ratio = current_volume / avg_volume_1month if avg_volume_1month > 0 else 0
+
+            # ブレイク率（何%上抜けたか）
+            breakout_pct = (recent_high - box_high) / box_high * 100
+
+            self.perfect_order_stats["passed_breakout"] += 1
+
+            # ── 条件3: 出来高急増確認（60日平均の1.5倍以上）──────────────
+            avg_volume = float(df_box['Volume'].mean())
+            rv_ratio = current_volume / avg_volume if avg_volume > 0 else 0
+
             if rv_ratio < 1.5:
-                logger.debug(f"[{code}] 相対出来高不足: {rv_ratio:.2f}倍 < 1.5倍")
+                logger.debug(f"[{code}] 出来高不足: {rv_ratio:.2f}倍 < 1.5倍")
                 return None
-            
-            self.perfect_order_stats["passed_volume_increase"] += 1
+
+            self.perfect_order_stats["passed_volume"] += 1
+
+            # ── 条件4: EMA50より上（トレンド転換確認）───────────────────
+            df['EMA50'] = self.calculate_ema(df['Close'], 50)
+            df['EMA20'] = self.calculate_ema(df['Close'], 20)
+            df['EMA10'] = self.calculate_ema(df['Close'], 10)
+            latest = df.iloc[-1]  # EMA計算後に再取得
+
+            if current_price < float(latest['EMA50']):
+                logger.debug(f"[{code}] EMA50未満: Close={current_price:.0f} < EMA50={latest['EMA50']:.0f}")
+                return None
+
+            self.perfect_order_stats["passed_ema"] += 1
             self.perfect_order_stats["final_detected"] += 1
-            
+
+            logger.debug(
+                f"[{code}] ✅ ボックスブレイク検出: "
+                f"ボックス幅={box_width_pct:.1f}%, ブレイク率={breakout_pct:.1f}%, "
+                f"出来高倍率={rv_ratio:.2f}倍"
+            )
+
             return {
                 "code": code,
                 "name": name,
-                "price": float(latest['Close']),
+                "price": current_price,
                 "ema10": float(latest['EMA10']),
                 "ema20": float(latest['EMA20']),
                 "ema50": float(latest['EMA50']),
                 "market": self._market_code_to_name(market),
-                "volume": int(latest.get('Volume', 0)),
-                "price_increase_pct": round(price_increase_pct, 2),
-                "rv_ratio": round(rv_ratio, 2)
+                "volume": int(current_volume),
+                "pullback_pct": round(box_width_pct, 2),    # ボックス幅をpullback_pctフィールドに流用
+                "week52_high": round(box_high, 2),           # ボックス高値をweek52_highに流用
+                "stochastic_k": round(breakout_pct, 2),      # ブレイク率をstochastic_kに流用
+                "stochastic_d": round(rv_ratio, 2),          # 出来高倍率をstochastic_dに流用
             }
-            
+
         except Exception as e:
             logger.debug(f"スクリーニングエラー [{code}]: {e}")
             return None
@@ -1311,19 +1295,19 @@ class StockScreener:
         
         start_time = datetime.now()
         
-        # パーフェクトオーダー
-        logger.info("パーフェクトオーダースクリーニング開始")
+        # ブレイクアウト（持ち合い上放れ）
+        logger.info("ブレイクアウト（持ち合い上放れ）スクリーニング開始")
         po_start = datetime.now()
-        perfect_order = await self.process_stocks_batch(
-            stocks, self.screen_stock_perfect_order, "パーフェクトオーダー"
+        breakout = await self.process_stocks_batch(
+            stocks, self.screen_stock_breakout, "ブレイクアウト"
         )
         po_time = int((datetime.now() - po_start).total_seconds() * 1000)
-        logger.info(f"パーフェクトオーダー検出: {len(perfect_order)}銘柄 ({po_time}ms)")
+        logger.info(f"ブレイクアウト検出: {len(breakout)}銘柄 ({po_time}ms)")
         
         # 統計情報を表示
         if hasattr(self, 'perfect_order_stats'):
             stats = self.perfect_order_stats
-            logger.info("📊 パーフェクトオーダースクリーニング 詳細統計")
+            logger.info("📊 ブレイクアウトスクリーニング 詳細統計")
             logger.info("="*60)
             logger.info(f"📄 処理対象: {stats['total']:,}銘柄")
             
@@ -1334,28 +1318,24 @@ class StockScreener:
             logger.info(f"\n🔹 条件別通過状況:")
             
             if stats['has_data'] > 0:
-                logger.info(f"  1️⃣ パーフェクトオーダー成立: {stats['passed_perfect_order']:,}銘柄 ({stats['passed_perfect_order']/stats['has_data']*100:.2f}%)")
-            else:
-                logger.info(f"  1️⃣ パーフェクトオーダー成立: {stats['passed_perfect_order']:,}銘柄")
-            
-            if stats['passed_perfect_order'] > 0:
-                logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 ({stats['passed_divergence']/stats['passed_perfect_order']*100:.2f}% of 条件1通過)")
-            else:
-                logger.info(f"  2️⃣ 乖離率20%以内: {stats['passed_divergence']:,}銘柄 (条件1通過が0のため計算不可)")
+                logger.info(f"  1️⃣ ボックス幅15%以内: {stats.get('passed_box', 0):,}銘柄 ({stats.get('passed_box', 0)/stats['has_data']*100:.2f}%)")
+                logger.info(f"  2️⃣ 高値ブレイクアウト: {stats.get('passed_breakout', 0):,}銘柄")
+                logger.info(f"  3️⃣ 出来高急増1.5倍以上: {stats.get('passed_volume', 0):,}銘柄")
+                logger.info(f"  4️⃣ EMA50以上: {stats.get('passed_ema', 0):,}銘柄")
             
             logger.info(f"\n⭐ 全条件通過: {stats['final_detected']:,}銘柄")
             logger.info("="*60 + "\n")
         
         # 間引き処理
-        perfect_order_sampled = sample_stocks_balanced(perfect_order, max_per_range=10)
+        breakout_sampled = sample_stocks_balanced(breakout, max_per_range=10)
         
         # Supabase保存（元の検出数を保持）
         screening_id = self.sb_client.save_screening_result(
-            "perfect_order", datetime.now().strftime('%Y-%m-%d'),
-            len(perfect_order), po_time  # 元の検出数
+            "breakout", datetime.now().strftime('%Y-%m-%d'),
+            len(breakout), po_time  # 元の検出数
         )
         if screening_id:
-            self.sb_client.save_detected_stocks(screening_id, perfect_order_sampled)
+            self.sb_client.save_detected_stocks(screening_id, breakout_sampled)
         
         # ボリンジャーバンド
         logger.info("=" * 60)
@@ -1506,7 +1486,7 @@ class StockScreener:
                 "pullback_ema": PULLBACK_EMA_FILTER,
                 "pullback_stochastic": PULLBACK_STOCHASTIC_FILTER
             },
-            "perfect_order": perfect_order,
+            "breakout": breakout,
             "bollinger_band": bollinger_band,
             "200day_pullback": week52_pullback,
             "squeeze": squeeze
@@ -1561,14 +1541,14 @@ class HistoryManager:
                 "to": max(history.keys())
             },
             "avg_detections": {
-                "perfect_order": 0,
+                "breakout": 0,
                 "bollinger_band": 0,
                 "200day_pullback": 0
             }
         }
         
         for data in history.values():
-            stats["avg_detections"]["perfect_order"] += len(data.get("perfect_order", []))
+            stats["avg_detections"]["breakout"] += len(data.get("breakout", []))
             stats["avg_detections"]["bollinger_band"] += len(data.get("bollinger_band", []))
             stats["avg_detections"]["200day_pullback"] += len(data.get("200day_pullback", []))
         
@@ -1675,7 +1655,7 @@ async def main():
             logger.info(f"履歴日数: {stats['total_days']}日")
             logger.info(f"期間: {stats['date_range']['from']} ~ {stats['date_range']['to']}")
             logger.info(f"平均検出数:")
-            logger.info(f"  - パーフェクトオーダー: {stats['avg_detections']['perfect_order']}銘柄/日")
+            logger.info(f"  - ブレイクアウト: {stats['avg_detections']['breakout']}銘柄/日")
             logger.info(f"  - ボリンジャーバンド: {stats['avg_detections']['bollinger_band']}銘柄/日")
             logger.info(f"  - 200日新高値押し目: {stats['avg_detections']['200day_pullback']}銘柄/日")
         

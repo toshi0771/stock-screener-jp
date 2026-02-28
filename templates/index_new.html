@@ -346,8 +346,8 @@
         
         <!-- ボタングリッド -->
         <div class="button-grid">
-            <div class="card-button" data-method="perfect_order">
-                <div class="title">パーフェクト<br>オーダー</div>
+            <div class="card-button" data-method="breakout">
+                <div class="title">ブレイク<br>アウト</div>
             </div>
             <div class="card-button" data-method="bollinger_band">
                 <div class="title">ボリンジャー<br>バンド</div>
@@ -385,13 +385,13 @@
                 </select>
             </div>
             
-            <!-- パーフェクトオーダー専用オプション -->
-            <div class="option-group" id="perfectOrderOptions" style="display: none;">
-                <label class="option-label">株価と50EMAとの乖離率</label>
-                <select class="option-select" id="ema50DivergenceSelect">
+            <!-- ブレイクアウト専用オプション -->
+            <div class="option-group" id="breakoutOptions" style="display: none;">
+                <label class="option-label">ボックス幅フィルター</label>
+                <select class="option-select" id="boxWidthSelect">
                     <option value="all">全て</option>
-                    <option value="5">5%未満</option>
-                    <option value="10">10%未満</option>
+                    <option value="10">10%以内</option>
+                    <option value="15">15%以内</option>
                 </select>
             </div>
             
@@ -490,7 +490,7 @@
                 // 過去データの場合はプルダウンを表示
                 const periodSelect = document.getElementById('periodSelect');
                 const optionsArea = document.getElementById('optionsArea');
-                const perfectOrderOptions = document.getElementById('perfectOrderOptions');
+                const breakoutOptions = document.getElementById('breakoutOptions');
                 const bollingerOptions = document.getElementById('bollingerOptions');
                 const pullbackOptions = document.getElementById('pullbackOptions');
                 const pullbackOptions2 = document.getElementById('pullbackOptions2');
@@ -504,33 +504,33 @@
                     optionsArea.classList.add('show');
                     
                     // 手法別のオプション表示切り替え
-                    if (selectedMethod === 'perfect_order') {
-                        perfectOrderOptions.style.display = 'block';
+                    if (selectedMethod === 'breakout') {
+                        breakoutOptions.style.display = 'block';
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === 'bollinger_band') {
-                        perfectOrderOptions.style.display = 'none';
+                        breakoutOptions.style.display = 'none';
 
                         bollingerOptions.style.display = 'block';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                     } else if (selectedMethod === '200day_pullback') {
-                        perfectOrderOptions.style.display = 'none';
+                        breakoutOptions.style.display = 'none';
 
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'block';
                         pullbackOptions2.style.display = 'block';
                         squeezeOptions.style.display = 'none';
                     } else if (selectedMethod === 'squeeze') {
-                        perfectOrderOptions.style.display = 'none';
+                        breakoutOptions.style.display = 'none';
 
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
                         pullbackOptions2.style.display = 'none';
                         squeezeOptions.style.display = 'block';
                     } else {
-                        perfectOrderOptions.style.display = 'none';
+                        breakoutOptions.style.display = 'none';
 
                         bollingerOptions.style.display = 'none';
                         pullbackOptions.style.display = 'none';
@@ -579,10 +579,10 @@
                             html += `<div style="margin-bottom: 40px; border: 1px solid #ddd; border-radius: 8px; padding: 20px; background: white;">`;
                             html += `<h3 style="margin-top: 0; color: #1e3a8a;">日付: ${row.date}</h3>`;
                             
-                            // パーフェクトオーダー（2列）
+                            // ブレイクアウト（2列）
                             html += '<div style="margin-bottom: 30px;">';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">パーフェクトオーダー</h4>';
-                            html += renderCategoryStocks(row.perfect_order, 'perfect_order');
+                            html += '<h4 style="color: #059669; margin-bottom: 10px;">ブレイクアウト（持ち合い上放れ）</h4>';
+                            html += renderCategoryStocks(row.breakout, 'breakout');
                             html += '</div>';
                             
                             // ボリンジャーバンド（2列）
@@ -660,9 +660,9 @@
                     const market = document.getElementById('marketSelect').value;
                     const options = { market: market };
                     
-                    // パーフェクトオーダーの場合、オプションを追加
-                    if (selectedMethod === 'perfect_order') {
-                        options.ema50_divergence = document.getElementById('ema50DivergenceSelect').value;
+                    // ブレイクアウトの場合、オプションを追加
+                    if (selectedMethod === 'breakout') {
+                        options.box_width = document.getElementById('boxWidthSelect').value;
                     }
                     
                     // ボリンジャーバンドの場合、オプションを追加
@@ -697,7 +697,7 @@
                     const data = await response.json();
                     
                     const methodNames = {
-                        'perfect_order': 'パーフェクトオーダー',
+                        'breakout': 'ブレイクアウト（持ち合い上放れ）',
                         'bollinger_band': 'ボリンジャーバンド±3σ',
                         '200day_pullback': '200日新高値押し目',
                         'squeeze': 'スクイーズ（価格収縮）'
@@ -712,8 +712,8 @@
                         let html = '<table><thead><tr>';
                         html += '<th>コード</th><th>銘柄名</th><th>市場</th><th>株価</th><th>出来高</th>';
                         
-                        if (selectedMethod === 'perfect_order') {
-                            html += '<th>10EMA</th><th>20EMA</th><th>50EMA</th>';
+                        if (selectedMethod === 'breakout') {
+                            html += '<th>ボックス幅</th><th>ブレイク率</th><th>出来高倍率</th>';
                         } else if (selectedMethod === 'bollinger_band') {
                             html += '<th>SMA20</th><th>上限3σ</th><th>下限3σ</th>';
                         } else if (selectedMethod === '200day_pullback') {
@@ -737,10 +737,10 @@
                             html += `<td>${stock.price ? stock.price.toLocaleString() : '-'}</td>`;
                             html += `<td>${stock.volume ? stock.volume.toLocaleString() : '-'}</td>`;
                             
-                            if (selectedMethod === 'perfect_order') {
-                                html += `<td>${stock.ema10 ? stock.ema10.toFixed(2) : '-'}</td>`;
-                                html += `<td>${stock.ema20 ? stock.ema20.toFixed(2) : '-'}</td>`;
-                                html += `<td>${stock.ema50 ? stock.ema50.toFixed(2) : '-'}</td>`;
+                            if (selectedMethod === 'breakout') {
+                                html += `<td>${stock.pullback_pct !== undefined ? stock.pullback_pct.toFixed(1) + '%' : '-'}</td>`;
+                                html += `<td>${stock.stochastic_k !== undefined ? stock.stochastic_k.toFixed(1) + '%' : '-'}</td>`;
+                                html += `<td>${stock.stochastic_d !== undefined ? stock.stochastic_d.toFixed(2) + '倍' : '-'}</td>`;
                             } else if (selectedMethod === 'bollinger_band') {
                                 html += `<td>${stock.sma20 ? stock.sma20.toFixed(2) : '-'}</td>`;
                                 html += `<td>${stock.upper_3sigma ? stock.upper_3sigma.toFixed(2) : '-'}</td>`;
@@ -784,11 +784,11 @@
                 }
                 
                 // CSVデータを生成
-                let csv = '日付,パーフェクトオーダー,ボリンジャーバンド,200日新高値押し目\n';
+                let csv = '日付,ブレイクアウト,ボリンジャーバンド,200日新高値押し目\n';
                 
                 data.history.forEach(row => {
                     csv += `${row.date},`;
-                    csv += `"${row.perfect_order_stocks || '-'}",`;
+                    csv += `"${row.breakout_stocks || '-'}",`;
                     csv += `"${row.bollinger_band_stocks || '-'}",`;
                     csv += `"${row.pullback_stocks || '-'}"\n`;
                 });

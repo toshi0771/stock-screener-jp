@@ -116,13 +116,14 @@ def get_latest_screening_results(screening_type, market='all'):
             }
             
             # スクリーニング手法別の追加情報
-            if screening_type == 'perfect_order':
+            if screening_type == 'breakout':
                 result.update({
                     'ema10': float(stock['ema_10']) if stock['ema_10'] else None,
                     'ema20': float(stock['ema_20']) if stock['ema_20'] else None,
                     'ema50': float(stock['ema_50']) if stock['ema_50'] else None,
-                    'sma200': float(stock['sma_200']) if stock['sma_200'] else None,
-                    'sma200_position': stock['sma200_position']
+                    'pullback_pct': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
+                    'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
+                    'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None,
                 })
             elif screening_type == 'bollinger_band':
                 result.update({
@@ -173,36 +174,20 @@ def api_screening():
         market = options.get('market', 'all')
         
         # オプションパラメータを取得
-        sma200_filter = options.get('sma200', 'all')  # パーフェクトオーダー用
-        ema50_divergence = options.get('ema50_divergence', 'all')  # パーフェクトオーダー用
+        box_width_filter = options.get('box_width', 'all')  # ブレイクアウト用
         sigma_filter = options.get('sigma', 'all')  # ボリンジャーバンド用
         use_stochastic = options.get('use_stochastic', False)  # 200日新高値押し目用
         
-        print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, SMA200: {sma200_filter}, EMA50乖離: {ema50_divergence}, σ: {sigma_filter}, ストキャス: {use_stochastic}", file=sys.stderr)
+        print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, ボックス幅: {box_width_filter}, σ: {sigma_filter}, ストキャス: {use_stochastic}", file=sys.stderr)
         
         # Supabaseから実データを取得
         results = get_latest_screening_results(method, market)
         
-        # パーフェクトオーダー: 200SMAフィルター適用
-        if method == 'perfect_order' and sma200_filter != 'all':
-            if sma200_filter == 'above':
-                results = [r for r in results if r.get('sma200_position') == 'above']
-            elif sma200_filter == 'below':
-                results = [r for r in results if r.get('sma200_position') == 'below']
-        
-        # パーフェクトオーダー: 50EMA乖離率フィルター適用
-        if method == 'perfect_order' and ema50_divergence != 'all':
-            threshold = float(ema50_divergence) / 100.0  # 10% -> 0.1
-            filtered_results = []
-            for r in results:
-                price = r.get('price')
-                ema50 = r.get('ema50')
-                if price and ema50 and ema50 > 0:
-                    divergence = abs(price - ema50) / ema50
-                    if divergence < threshold:
-                        filtered_results.append(r)
-            results = filtered_results
-            print(f"   50EMA乖離率フィルター適用後: {len(results)}件", file=sys.stderr)
+        # ブレイクアウト: ボックス幅フィルター適用
+        if method == 'breakout' and box_width_filter != 'all':
+            threshold = float(box_width_filter)
+            results = [r for r in results if r.get('pullback_pct') is not None and r.get('pullback_pct') <= threshold]
+            print(f"   ボックス幅フィルター適用後: {len(results)}件", file=sys.stderr)
         
         # ボリンジャーバンド: σフィルター適用
         if method == 'bollinger_band' and sigma_filter != 'all':
@@ -315,11 +300,14 @@ def api_historical():
             }
             
             # スクリーニング手法別の追加情報
-            if method == 'perfect_order':
+            if method == 'breakout':
                 result.update({
                     'ema10': float(stock['ema_10']) if stock['ema_10'] else None,
                     'ema20': float(stock['ema_20']) if stock['ema_20'] else None,
                     'ema50': float(stock['ema_50']) if stock['ema_50'] else None,
+                    'pullback_pct': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
+                    'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
+                    'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None,
                 })
             elif method == 'bollinger_band':
                 result.update({
@@ -396,19 +384,19 @@ def get_history():
             if date not in history_dict:
                 history_dict[date] = {
                     'date': date,
-                    'perfect_order': 0,
+                    'breakout': 0,
                     'bollinger_band': 0,
                     'pullback_200day': 0,
                     'squeeze': 0,
-                    'perfect_order_id': None,
+                    'breakout_id': None,
                     'bollinger_band_id': None,
                     'pullback_200day_id': None,
                     'squeeze_id': None
                 }
             
-            if screening_type == 'perfect_order':
-                history_dict[date]['perfect_order'] = count
-                history_dict[date]['perfect_order_id'] = result_id
+            if screening_type == 'breakout':
+                history_dict[date]['breakout'] = count
+                history_dict[date]['breakout_id'] = result_id
             elif screening_type == 'bollinger_band':
                 history_dict[date]['bollinger_band'] = count
                 history_dict[date]['bollinger_band_id'] = result_id
@@ -421,31 +409,24 @@ def get_history():
         
         # 銘柄名を取得（分類別）
         for date_data in history_dict.values():
-            # パーフェクトオーダーの銘柄取得（sma200_positionで分類）
-            if date_data['perfect_order_id']:
+            # ブレイクアウトの銘柄取得
+            if date_data['breakout_id']:
                 stocks = supabase.table('detected_stocks')\
-                    .select('company_name, stock_code, market, sma200_position')\
-                    .eq('screening_result_id', date_data['perfect_order_id'])\
+                    .select('company_name, stock_code, market')\
+                    .eq('screening_result_id', date_data['breakout_id'])\
                     .execute()
                 
-                # sma200_positionで分類
-                above_200sma = []
-                below_200sma = []
+                breakout_stocks = []
                 for s in stocks.data:
                     stock_info = {
                         'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
                         'company_name': s['company_name']
                     }
-                    if s.get('sma200_position') == 'above':
-                        above_200sma.append(stock_info)
-                    else:
-                        below_200sma.append(stock_info)
+                    breakout_stocks.append(stock_info)
                 
-                date_data['perfect_order_above_200sma'] = above_200sma
-                date_data['perfect_order_below_200sma'] = below_200sma
+                date_data['breakout'] = breakout_stocks
             else:
-                date_data['perfect_order_above_200sma'] = []
-                date_data['perfect_order_below_200sma'] = []
+                date_data['breakout'] = []
             
             # ボリンジャーバンドの銘柄取得（touch_directionで分類）
             if date_data['bollinger_band_id']:
@@ -549,7 +530,7 @@ def get_history():
         # リストに変換してソート（銘柄数が1つ以上ある日付のみ）
         history_list = [
             date_data for date_data in history_dict.values()
-            if (date_data['perfect_order'] > 0 or 
+            if (len(date_data.get('breakout', [])) > 0 or
                 date_data['bollinger_band'] > 0 or 
                 date_data['pullback_200day'] > 0 or 
                 date_data['squeeze'] > 0)

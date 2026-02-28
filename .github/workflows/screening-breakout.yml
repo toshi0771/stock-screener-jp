@@ -1,4 +1,4 @@
-name: Perfect Order Screening
+name: Breakout Screening
 
 on:
   schedule:
@@ -11,7 +11,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  screen-perfect-order:
+  screen-breakout:
     runs-on: ubuntu-latest
     timeout-minutes: 360  # 6時間
     
@@ -37,7 +37,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Perfect Order Screening
+    - name: Run Breakout Screening
       env:
         JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
         JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}
@@ -45,7 +45,7 @@ jobs:
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
       run: |
-        python run_perfect_order.py
+        python run_breakout.py
     
     - name: Save stock price cache
       uses: actions/cache/save@v4
