@@ -505,7 +505,9 @@ def get_history():
                     
                     for s in squeeze_stocks.data:
                         additional_data = s.get('additional_data', {})
-                        duration_days = additional_data.get('duration_days', 0)
+                        # duration_daysはstochastic_kカラムに保存されている
+                        duration_days = s.get('stochastic_k') or additional_data.get('duration_days', 0)
+                        duration_days = int(duration_days) if duration_days else 0
                         
                         stock_info = {
                             'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],

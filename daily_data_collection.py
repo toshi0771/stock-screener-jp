@@ -1433,8 +1433,8 @@ class StockScreener:
             len(squeeze), sq_time  # 元の検出数
         )
         if screening_id:
-            # additional_dataとしてJSONB形式で保存
-            stocks_with_additional_data = []
+            # duration_daysをstochastic_kカラムに保存（additional_dataカラム非存在のため）
+            stocks_with_duration = []
             for s in squeeze_sampled:
                 stock_data = {
                     "code": s["code"],
@@ -1442,22 +1442,12 @@ class StockScreener:
                     "price": s["price"],
                     "market": s["market"],
                     "volume": s.get("volume", 0),
-                    "additional_data": {
-                        "current_bbw": s["current_bbw"],
-                        "bbw_min_60d": s["bbw_min_60d"],
-                        "bbw_ratio": s["bbw_ratio"],
-                        "deviation_from_ema": s["deviation_from_ema"],
-                        "current_atr": s["current_atr"],
-                        "atr_min_60d": s["atr_min_60d"],
-                        "atr_ratio": s["atr_ratio"],
-                        "duration_days": s["duration_days"],
-                        "current_price": s["price"],
-                        "ema_50": s["ema_50"]
-                    }
+                    "ema_50": s.get("ema_50"),
+                    "stochastic_k": s["duration_days"],  # duration_daysをstochastic_kに流用
                 }
-                stocks_with_additional_data.append(stock_data)
+                stocks_with_duration.append(stock_data)
             
-            self.sb_client.save_detected_stocks(screening_id, stocks_with_additional_data)
+            self.sb_client.save_detected_stocks(screening_id, stocks_with_duration)
         
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info("=" * 60)
