@@ -212,8 +212,8 @@ def api_screening():
             duration_filter = options['duration_filter']
             filtered_results = []
             for r in results:
-                additional_data = r.get('additional_data', {})
-                duration_days = additional_data.get('duration_days', 0)
+                # duration_daysはstochastic_kカラムに保存されている（additional_dataカラム非存在のため）
+                duration_days = int(r.get('stochastic_k') or 0)
                 
                 if duration_filter == '1week' and 1 <= duration_days <= 7:
                     filtered_results.append(r)
