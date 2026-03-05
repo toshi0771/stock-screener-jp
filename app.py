@@ -495,7 +495,7 @@ def get_history():
             if date_data['squeeze_id']:
                 try:
                     squeeze_stocks = supabase.table('detected_stocks')\
-                        .select('company_name, stock_code, market, additional_data')\
+                        .select('company_name, stock_code, market, stochastic_k')\
                         .eq('screening_result_id', date_data['squeeze_id'])\
                         .execute()
                     
