@@ -366,15 +366,15 @@ def get_history():
         
         print(f"\n📅 過去データ履歴リクエスト: {days}日間", file=sys.stderr)
         
-        # screening_resultsテーブルから期間内のデータを取得
+        # screening_resultsテーブルから期間内のデータを取得（created_atも取得して最新を選択）
         query = supabase.table('screening_results')\
-            .select('id, screening_date, screening_type, total_stocks_found')\
+            .select('id, screening_date, screening_type, total_stocks_found, created_at')\
             .gte('screening_date', start_date)\
-            .order('screening_date', desc=True)
+            .order('created_at', desc=True)
         
         results = query.execute()
         
-        # 日付ごとにデータを集計
+        # 日付ごとにデータを集計（同日複数回実行時は最新のcreated_atのものを使用）
         history_dict = {}
         for row in results.data:
             date = row['screening_date']
@@ -395,16 +395,17 @@ def get_history():
                     'squeeze_id': None
                 }
             
-            if screening_type == 'breakout':
+            # 同日複数回実行時はcreated_at降順のため、最初に登場したもの（最新）のみ採用
+            if screening_type == 'breakout' and history_dict[date]['breakout_id'] is None:
                 history_dict[date]['breakout'] = count
                 history_dict[date]['breakout_id'] = result_id
-            elif screening_type == 'bollinger_band':
+            elif screening_type == 'bollinger_band' and history_dict[date]['bollinger_band_id'] is None:
                 history_dict[date]['bollinger_band'] = count
                 history_dict[date]['bollinger_band_id'] = result_id
-            elif screening_type == '200day_pullback':
+            elif screening_type == '200day_pullback' and history_dict[date]['pullback_200day_id'] is None:
                 history_dict[date]['pullback_200day'] = count
                 history_dict[date]['pullback_200day_id'] = result_id
-            elif screening_type == 'squeeze':
+            elif screening_type == 'squeeze' and history_dict[date]['squeeze_id'] is None:
                 history_dict[date]['squeeze'] = count
                 history_dict[date]['squeeze_id'] = result_id
         
