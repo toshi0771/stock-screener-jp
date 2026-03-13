@@ -717,9 +717,9 @@ class StockScreener:
 
             box_width_pct = (box_high - box_low) / box_low * 100
 
-            # ボックス幅が15%超 → 持ち合いではなくトレンド相場とみなしてスキップ
-            if box_width_pct > 15:
-                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 15%")
+            # ボックス幅が25%超 → 持ち合いではなくトレンド相場とみなしてスキップ
+            if box_width_pct > 25:
+                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 25%")
                 return None
 
             self.perfect_order_stats["passed_box"] += 1
@@ -735,12 +735,12 @@ class StockScreener:
 
             self.perfect_order_stats["passed_breakout"] += 1
 
-            # ── 条件3: 出来高急増確認（60日平均の1.5倍以上）──────────────
+            # ── 条件3: 出来高急増確認（60日平均の1.2倍以上）──────────────
             avg_volume = float(df_box['Volume'].mean())
             rv_ratio = current_volume / avg_volume if avg_volume > 0 else 0
 
-            if rv_ratio < 1.5:
-                logger.debug(f"[{code}] 出来高不足: {rv_ratio:.2f}倍 < 1.5倍")
+            if rv_ratio < 1.2:
+                logger.debug(f"[{code}] 出来高不足: {rv_ratio:.2f}倍 < 1.2倍")
                 return None
 
             self.perfect_order_stats["passed_volume"] += 1
