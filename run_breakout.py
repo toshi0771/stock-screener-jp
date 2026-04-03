@@ -71,6 +71,21 @@ async def main():
         )
         bo_time = int((datetime.now() - bo_start).total_seconds() * 1000)
         logger.info(f"✅ ブレイクアウト検出: {len(breakout)}銘柄 ({bo_time}ms)")
+
+        # 詳細統計を出力
+        if hasattr(screener, 'perfect_order_stats'):
+            s = screener.perfect_order_stats
+            logger.info("=" * 60)
+            logger.info("📊 ブレイクアウト スクリーニング 詳細統計")
+            logger.info("=" * 60)
+            logger.info(f"  処理対象:         {s['total']:,}銘柄")
+            logger.info(f"  データ取得成功:   {s['has_data']:,}銘柄")
+            logger.info(f"  ボックス幅OK:     {s['passed_box']:,}銘柄 （幅35%以内）")
+            logger.info(f"  ブレイクアウトOK: {s['passed_breakout']:,}銘柄 （直近5日で高値更新）")
+            logger.info(f"  出来高OK:         {s['passed_volume']:,}銘柄 （平均1.2倍以上）")
+            logger.info(f"  EMA50超OK:        {s['passed_ema']:,}銘柄 （EMA50より上）")
+            logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
+            logger.info("=" * 60)
         
         # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）
         target_date = screener.latest_trading_date.strftime('%Y-%m-%d')
