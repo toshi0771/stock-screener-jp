@@ -82,7 +82,7 @@ async def main():
             logger.info(f"  データ取得成功:   {s['has_data']:,}銘柄")
             logger.info(f"  ボックス幅OK:     {s['passed_box']:,}銘柄 （幅35%以内）")
             logger.info(f"  ブレイクアウトOK: {s['passed_breakout']:,}銘柄 （直近5日で高値更新）")
-            logger.info(f"  出来高OK:         {s['passed_volume']:,}銘柄 （平均1.2倍以上）")
+            logger.info(f"  ATRブレイクOK:    {s['passed_volume']:,}銘柄 （ATR1.5倍以上の値動き）")
             logger.info(f"  EMA50超OK:        {s['passed_ema']:,}銘柄 （EMA50より上）")
             logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
             logger.info("=" * 60)

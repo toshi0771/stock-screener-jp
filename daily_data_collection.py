@@ -652,7 +652,7 @@ class StockScreener:
         検出条件:
           1. 直近60営業日の値動きがボックス幅35%以内（持ち合い確認）
           2. 直近5営業日以内に60日高値を更新（上放れ確認）
-          3. 直近出来高が過去60日平均の1.2倍以上（出来高急増確認）
+          3. 直近5日の値幅がATR20日平均の1.5倍以上（大きな値動き確認）
           4. 現在株価がEMA50より上（トレンド転換確認）
         """
         code = stock["Code"]
@@ -735,12 +735,20 @@ class StockScreener:
 
             self.perfect_order_stats["passed_breakout"] += 1
 
-            # ── 条件3: 出来高急増確認（60日平均の1.2倍以上）──────────────
-            avg_volume = float(df_box['Volume'].mean())
-            rv_ratio = current_volume / avg_volume if avg_volume > 0 else 0
+            # ── 条件3: ATRブレイク確認（普段より大きな値動き）──────────────
+            # ATR（Average True Range）= 過去20日の真値幅の平均
+            # 真値幅 = max(High-Low, |High-前日Close|, |Low-前日Close|)
+            df_atr = df.iloc[-lookback:].copy()
+            df_atr['prev_close'] = df_atr['Close'].shift(1)
+            df_atr['tr'] = df_atr[['High', 'prev_close']].max(axis=1) - df_atr[['Low', 'prev_close']].min(axis=1)
+            atr_20 = float(df_atr['tr'].iloc[-20:].mean())
 
-            if rv_ratio < 1.2:
-                logger.debug(f"[{code}] 出来高不足: {rv_ratio:.2f}倍 < 1.2倍")
+            # 直近5日の最大値幅
+            recent_range = float(df.iloc[-5:]['High'].max()) - float(df.iloc[-5:]['Low'].min())
+            atr_ratio = recent_range / atr_20 if atr_20 > 0 else 0
+
+            if atr_ratio < 1.5:
+                logger.debug(f"[{code}] ATR不足: {atr_ratio:.2f}倍 < 1.5倍")
                 return None
 
             self.perfect_order_stats["passed_volume"] += 1
@@ -761,7 +769,7 @@ class StockScreener:
             logger.debug(
                 f"[{code}] ✅ ボックスブレイク検出: "
                 f"ボックス幅={box_width_pct:.1f}%, ブレイク率={breakout_pct:.1f}%, "
-                f"出来高倍率={rv_ratio:.2f}倍"
+                f"ATR倍率={atr_ratio:.2f}倍"
             )
 
             return {
@@ -773,10 +781,10 @@ class StockScreener:
                 "ema50": float(latest['EMA50']),
                 "market": self._market_code_to_name(market),
                 "volume": int(current_volume),
-                "pullback_pct": round(box_width_pct, 2),    # ボックス幅をpullback_pctフィールドに流用
-                "week52_high": round(box_high, 2),           # ボックス高値をweek52_highに流用
-                "stochastic_k": round(breakout_pct, 2),      # ブレイク率をstochastic_kに流用
-                "stochastic_d": round(rv_ratio, 2),          # 出来高倍率をstochastic_dに流用
+                "pullback_pct": round(box_width_pct, 2),   # ボックス幅
+                "week52_high": round(box_high, 2),          # ボックス高値
+                "stochastic_k": round(breakout_pct, 2),     # ブレイク率
+                "stochastic_d": round(atr_ratio, 2),        # ATR倍率
             }
 
         except Exception as e:
