@@ -102,6 +102,9 @@ async def main():
             if stats['within_30pct'] > 0:
                 logger.info(f"  ✅ いずれかのEMAタッチ: {stats['any_ema_touch']:,}銘柄 ({stats['any_ema_touch']/stats['within_30pct']*100:.2f}%)")
             
+            if stats['any_ema_touch'] > 0:
+                logger.info(f"  📈 EMA50上昇トレンド: {stats['ema50_rising']:,}銘柄 ({stats['ema50_rising']/stats['any_ema_touch']*100:.2f}%)")
+            
             logger.info(f"\n⭐ 全条件通過: {stats['passed_all']:,}銘柄")
             logger.info("="*60 + "\n")
         

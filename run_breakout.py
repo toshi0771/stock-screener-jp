@@ -84,6 +84,7 @@ async def main():
             logger.info(f"  ブレイクアウトOK: {s['passed_breakout']:,}銘柄 （直近5日で高値更新）")
             logger.info(f"  ATRブレイクOK:    {s['passed_volume']:,}銘柄 （ATR1.5倍以上の値動き）")
             logger.info(f"  EMA50超OK:        {s['passed_ema']:,}銘柄 （EMA50より上）")
+            logger.info(f"  3EMA収束OK:       {s['passed_convergence']:,}銘柄 （ブレイク前にEMA収束）")
             logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
             logger.info("=" * 60)
         

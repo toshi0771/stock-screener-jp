@@ -76,6 +76,7 @@ async def main():
             logger.info(f"  乖離率条件で除外: {stats['deviation_failed']}銘柄")
             logger.info(f"  ATR条件で除外: {stats['atr_failed']}銘柄")
             logger.info(f"  継続日数不足で除外: {stats['duration_failed']}銘柄")
+            logger.info(f"  EMA50平坦でない: {stats['ema50_flat_failed']}銘柄 （上昇・下落トレンド中を除外）")
             logger.info(f"  最終検出数: {stats['passed_all']}銘柄")
             logger.info("="*80)
         

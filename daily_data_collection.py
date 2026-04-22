@@ -665,10 +665,11 @@ class StockScreener:
                 "total": 0,
                 "has_data": 0,
                 "data_insufficient": 0,
-                "passed_box": 0,       # ボックス幅条件通過
-                "passed_breakout": 0,  # 高値ブレイク条件通過
-                "passed_volume": 0,    # 出来高条件通過
-                "passed_ema": 0,       # EMA50条件通過
+                "passed_box": 0,        # ボックス幅条件通過
+                "passed_breakout": 0,   # 高値ブレイク条件通過
+                "passed_volume": 0,     # ATR条件通過
+                "passed_ema": 0,        # EMA50条件通過
+                "passed_convergence": 0, # 3EMA収束条件通過
                 "final_detected": 0
             }
 
@@ -764,6 +765,28 @@ class StockScreener:
                 return None
 
             self.perfect_order_stats["passed_ema"] += 1
+
+            # ── 条件5: 直近でEMAが収束していたか確認（3EMA収束後の上放れ）──
+            # ブレイク直前（5〜15日前）の時点でEMA10とEMA50の差が株価の5%以内
+            # → 「すでに上がりきった銘柄」は3EMAが大きく開いているので除外
+            convergence_detected = False
+            for i in range(5, 16):  # 5日前〜15日前の間でいずれか収束していればOK
+                if len(df) > i:
+                    past = df.iloc[-(i+1)]
+                    past_ema10 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 10).iloc[-1])
+                    past_ema50 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 50).iloc[-1])
+                    past_price = float(past['Close'])
+                    if past_price > 0:
+                        ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
+                        if ema_diff_pct <= 5.0:
+                            convergence_detected = True
+                            break
+
+            if not convergence_detected:
+                logger.debug(f"[{code}] 3EMA収束なし: ブレイク前5〜15日間でEMA10-EMA50差が5%超")
+                return None
+
+            self.perfect_order_stats["passed_convergence"] += 1
             self.perfect_order_stats["final_detected"] += 1
 
             logger.debug(
@@ -876,6 +899,7 @@ class StockScreener:
                 'ema20_touch': 0,
                 'ema50_touch': 0,
                 'any_ema_touch': 0,
+                'ema50_rising': 0,  # EMA50上昇トレンド条件通過
                 'passed_all': 0
             }
         
@@ -1042,6 +1066,15 @@ class StockScreener:
                 if stoch_k is None or stoch_k > 20:  # 売られすぎ閾値
                     return None
             
+            # 条件: EMA50が20日前より上（上昇トレンド中のみ）
+            if len(df) >= 20:
+                ema50_20days_ago = float(df['EMA50'].iloc[-20])
+                ema50_now = float(latest['EMA50'])
+                if ema50_now <= ema50_20days_ago:
+                    logger.debug(f"[{code}] EMA50下降中: 現在{ema50_now:.0f} <= 20日前{ema50_20days_ago:.0f}")
+                    return None
+            self.pullback_stats['ema50_rising'] += 1
+            
             # 全条件通過！
             self.pullback_stats['passed_all'] += 1
             
@@ -1076,6 +1109,7 @@ class StockScreener:
                 'deviation_failed': 0,
                 'atr_failed': 0,
                 'duration_failed': 0,
+                'ema50_flat_failed': 0,  # EMA50平坦条件不通過
                 'passed_all': 0
             }
         
@@ -1205,6 +1239,17 @@ class StockScreener:
             if duration < min_duration:
                 self.squeeze_stats['duration_failed'] += 1
                 return None
+            
+            # 条件5: EMA50が平坦（凪状態の確認）
+            # 20日前のEMA50との差が株価の2%以内 → 上昇中・下落中を除外
+            if len(ema50) >= 20:
+                ema50_now = float(ema50.iloc[-1])
+                ema50_20d_ago = float(ema50.iloc[-20])
+                ema50_change_pct = abs(ema50_now - ema50_20d_ago) / ema50_20d_ago * 100
+                if ema50_change_pct > 2.0:
+                    self.squeeze_stats['ema50_flat_failed'] += 1
+                    logger.debug(f"[{code}] EMA50が平坦でない: 20日変化率={ema50_change_pct:.1f}% > 2%")
+                    return None
             
             # すべての条件を満たした
             self.squeeze_stats['passed_all'] += 1
