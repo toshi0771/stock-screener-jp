@@ -650,7 +650,7 @@ class StockScreener:
         
         ハブ(3030)のような長期持ち合い後の急上昇銘柄を検出する。
         検出条件:
-          1. 直近60営業日の値動きがボックス幅35%以内（持ち合い確認）
+          1. 直近60営業日の値動きがボックス幅20%以内（持ち合い確認）
           2. 直近5営業日以内に60日高値を更新（上放れ確認）
           3. 直近5日の値幅がATR20日平均の1.5倍以上（大きな値動き確認）
           4. 現在株価がEMA50より上（トレンド転換確認）
@@ -718,9 +718,9 @@ class StockScreener:
 
             box_width_pct = (box_high - box_low) / box_low * 100
 
-            # ボックス幅が35%超 → 持ち合いではなくトレンド相場とみなしてスキップ
-            if box_width_pct > 35:
-                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 25%")
+            # ボックス幅が20%超 → 持ち合いではなくトレンド相場とみなしてスキップ
+            if box_width_pct > 20:
+                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 20%")
                 return None
 
             self.perfect_order_stats["passed_box"] += 1
