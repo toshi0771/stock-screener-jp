@@ -767,20 +767,24 @@ class StockScreener:
             self.perfect_order_stats["passed_ema"] += 1
 
             # ── 条件5: 直近でEMAが収束していたか確認（3EMA収束後の上放れ）──
-            # ブレイク直前（5〜15日前）の時点でEMA10とEMA50の差が株価の5%以内
-            # → 「すでに上がりきった銘柄」は3EMAが大きく開いているので除外
+            # EMA10とEMA50は既に計算済み（latest取得前に計算されている）
+            # ブレイク直前5〜15日前の間でEMA10-EMA50の差が株価の5%以内ならOK
             convergence_detected = False
-            for i in range(5, 16):  # 5日前〜15日前の間でいずれか収束していればOK
-                if len(df) > i:
-                    past = df.iloc[-(i+1)]
-                    past_ema10 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 10).iloc[-1])
-                    past_ema50 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 50).iloc[-1])
-                    past_price = float(past['Close'])
-                    if past_price > 0:
-                        ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
-                        if ema_diff_pct <= 5.0:
-                            convergence_detected = True
-                            break
+            try:
+                for i in range(5, 16):
+                    if len(df) > i + 1:
+                        past_row = df.iloc[-(i + 1)]
+                        past_ema10 = float(past_row['EMA10'])
+                        past_ema50 = float(past_row['EMA50'])
+                        past_price = float(past_row['Close'])
+                        if past_price > 0 and not (pd.isna(past_ema10) or pd.isna(past_ema50)):
+                            ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
+                            if ema_diff_pct <= 5.0:
+                                convergence_detected = True
+                                break
+            except Exception as e:
+                logger.debug(f"[{code}] 3EMA収束チェックエラー: {e}")
+                convergence_detected = False
 
             if not convergence_detected:
                 logger.debug(f"[{code}] 3EMA収束なし: ブレイク前5〜15日間でEMA10-EMA50差が5%超")
