@@ -207,25 +207,7 @@ def api_screening():
             results = [r for r in results if r.get('stochastic_k') is not None and r.get('stochastic_k') <= 20]
             print(f"   ストキャスティクスフィルター適用後: {len(results)}件", file=sys.stderr)
         
-        # スクイーズ: 継続期間フィルター適用
-        if method == 'squeeze' and 'duration_filter' in options and options['duration_filter'] != 'all':
-            duration_filter = options['duration_filter']
-            filtered_results = []
-            for r in results:
-                # duration_daysはstochastic_kカラムに保存されている（additional_dataカラム非存在のため）
-                duration_days = int(r.get('stochastic_k') or 0)
-                
-                if duration_filter == '1week' and 1 <= duration_days <= 7:
-                    filtered_results.append(r)
-                elif duration_filter == '1-2weeks' and 8 <= duration_days <= 14:
-                    filtered_results.append(r)
-                elif duration_filter == '2weeks-1month' and 15 <= duration_days <= 30:
-                    filtered_results.append(r)
-                elif duration_filter == '1month+' and duration_days >= 31:
-                    filtered_results.append(r)
-            
-            results = filtered_results
-            print(f"   継続期間フィルター適用後: {len(results)}件", file=sys.stderr)
+        # スクイーズ手法は削除済み
         
         return jsonify({
             'success': True,
@@ -388,11 +370,9 @@ def get_history():
                     'breakout': 0,
                     'bollinger_band': 0,
                     'pullback_200day': 0,
-                    'squeeze': 0,
                     'breakout_id': None,
                     'bollinger_band_id': None,
                     'pullback_200day_id': None,
-                    'squeeze_id': None
                 }
             
             # 同日複数回実行時はcreated_at降順のため、最初に登場したもの（最新）のみ採用
@@ -405,9 +385,6 @@ def get_history():
             elif screening_type == '200day_pullback' and history_dict[date]['pullback_200day_id'] is None:
                 history_dict[date]['pullback_200day'] = count
                 history_dict[date]['pullback_200day_id'] = result_id
-            elif screening_type == 'squeeze' and history_dict[date]['squeeze_id'] is None:
-                history_dict[date]['squeeze'] = count
-                history_dict[date]['squeeze_id'] = result_id
         
         # 銘柄名を取得（分類別）
         for date_data in history_dict.values():
@@ -491,53 +468,13 @@ def get_history():
                 date_data['pullback_10ema'] = []
                 date_data['pullback_20ema'] = []
                 date_data['pullback_50ema'] = []
-            
-            # スクイーズの銘柄取得（継続期間で分類）
-            if date_data['squeeze_id']:
-                try:
-                    squeeze_stocks = supabase.table('detected_stocks')\
-                        .select('company_name, stock_code, market, stochastic_k')\
-                        .eq('screening_result_id', date_data['squeeze_id'])\
-                        .execute()
-                    
-                    # 継続期間で分類（1か月以内 / 1か月以上）
-                    squeeze_within_1month = []
-                    squeeze_1month_plus = []
-                    
-                    for s in squeeze_stocks.data:
-                        additional_data = s.get('additional_data', {})
-                        # duration_daysはstochastic_kカラムに保存されている
-                        duration_days = s.get('stochastic_k') or additional_data.get('duration_days', 0)
-                        duration_days = int(duration_days) if duration_days else 0
-                        
-                        stock_info = {
-                            'code': str(s['stock_code'])[:-1] if str(s['stock_code']).endswith('0') and len(str(s['stock_code']))==5 else s['stock_code'],
-                            'company_name': s['company_name'],
-                            'duration_days': duration_days
-                        }
-                        
-                        if 1 <= duration_days <= 30:
-                            squeeze_within_1month.append(stock_info)
-                        elif duration_days >= 31:
-                            squeeze_1month_plus.append(stock_info)
-                    
-                    date_data['squeeze_within_1month'] = squeeze_within_1month
-                    date_data['squeeze_1month_plus'] = squeeze_1month_plus
-                except Exception as e:
-                    print(f"   スクイーズ銘柄取得エラー: {e}", file=sys.stderr)
-                    date_data['squeeze_within_1month'] = []
-                    date_data['squeeze_1month_plus'] = []
-            else:
-                date_data['squeeze_within_1month'] = []
-                date_data['squeeze_1month_plus'] = []
         
         # リストに変換してソート（銘柄数が1つ以上ある日付のみ）
         history_list = [
             date_data for date_data in history_dict.values()
             if (len(date_data.get('breakout', [])) > 0 or
                 date_data['bollinger_band'] > 0 or 
-                date_data['pullback_200day'] > 0 or 
-                date_data['squeeze'] > 0)
+                date_data['pullback_200day'] > 0)
         ]
         history_list = sorted(history_list, key=lambda x: x['date'], reverse=True)
         

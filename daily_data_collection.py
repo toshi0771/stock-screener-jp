@@ -767,24 +767,20 @@ class StockScreener:
             self.perfect_order_stats["passed_ema"] += 1
 
             # ── 条件5: 直近でEMAが収束していたか確認（3EMA収束後の上放れ）──
-            # EMA10とEMA50は既に計算済み（latest取得前に計算されている）
-            # ブレイク直前5〜15日前の間でEMA10-EMA50の差が株価の5%以内ならOK
+            # ブレイク直前（5〜15日前）の時点でEMA10とEMA50の差が株価の5%以内
+            # → 「すでに上がりきった銘柄」は3EMAが大きく開いているので除外
             convergence_detected = False
-            try:
-                for i in range(5, 16):
-                    if len(df) > i + 1:
-                        past_row = df.iloc[-(i + 1)]
-                        past_ema10 = float(past_row['EMA10'])
-                        past_ema50 = float(past_row['EMA50'])
-                        past_price = float(past_row['Close'])
-                        if past_price > 0 and not (pd.isna(past_ema10) or pd.isna(past_ema50)):
-                            ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
-                            if ema_diff_pct <= 5.0:
-                                convergence_detected = True
-                                break
-            except Exception as e:
-                logger.debug(f"[{code}] 3EMA収束チェックエラー: {e}")
-                convergence_detected = False
+            for i in range(5, 16):  # 5日前〜15日前の間でいずれか収束していればOK
+                if len(df) > i:
+                    past = df.iloc[-(i+1)]
+                    past_ema10 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 10).iloc[-1])
+                    past_ema50 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 50).iloc[-1])
+                    past_price = float(past['Close'])
+                    if past_price > 0:
+                        ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
+                        if ema_diff_pct <= 5.0:
+                            convergence_detected = True
+                            break
 
             if not convergence_detected:
                 logger.debug(f"[{code}] 3EMA収束なし: ブレイク前5〜15日間でEMA10-EMA50差が5%超")
@@ -1102,185 +1098,6 @@ class StockScreener:
             logger.debug(f"スクリーニングエラー [{code}]: {e}")
             return None
     
-    async def screen_stock_squeeze(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄のスクイーズ（価格収縮）スクリーニング"""
-        # 統計情報用のカウンターを初期化（初回のみ）
-        if not hasattr(self, 'squeeze_stats'):
-            self.squeeze_stats = {
-                'total': 0,
-                'has_data': 0,
-                'bbw_failed': 0,
-                'deviation_failed': 0,
-                'atr_failed': 0,
-                'duration_failed': 0,
-                'ema50_flat_failed': 0,  # EMA50平坦条件不通過
-                'passed_all': 0
-            }
-        
-        self.squeeze_stats['total'] += 1
-        
-        code = stock["Code"]
-        # V2 APIでは "CoName"、V1 APIでは "CompanyName"
-        name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
-        # V2 APIでは "Mkt" フィールド、V1 APIでは "MarketCode" フィールド
-        market = stock.get("Mkt", stock.get("MarketCode", ""))
-        
-        try:
-            # キャッシュされた最新の取引日を使用
-            end_date = self.latest_trading_date
-            
-            # 日付範囲を取得（200日分）
-            start_str, end_str = get_date_range_for_screening(end_date, 200)
-            
-            # 永続キャッシュから取得を試みる（200日分のデータが必要）
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
-            
-            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
-            if df is None:
-                df = await self.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    self.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                # 取得したデータを永続キャッシュに保存
-                if df is not None:
-                    await self.persistent_cache.set(code, start_str, end_str, df)
-            
-            if df is None or len(df) < 20:
-                return None
-            
-            # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
-            # latest = df.iloc[-1]
-            # latest_data_date = pd.to_datetime(latest['Date']).date()
-            # end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            # 
-            # # キャッシュの最新データが実行日より3日以上古い場合は除外
-            # if (end_date_obj - latest_data_date).days > 3:
-            #     logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
-            #     return None
-            
-            self.squeeze_stats['has_data'] += 1
-            
-            # 最新100日分を取得
-            df = df.tail(100)
-            
-            # 各指標を計算
-            prices = df['Close']
-            high = df['High']
-            low = df['Low']
-            
-            # ボリンジャーバンド幅（BBW）
-            sma20 = prices.rolling(window=20).mean()
-            std20 = prices.rolling(window=20).std()
-            upper = sma20 + (std20 * 2)
-            lower = sma20 - (std20 * 2)
-            bbw = (upper - lower) / sma20 * 100
-            
-            # 50EMA
-            ema50 = prices.ewm(span=50, adjust=False).mean()
-            
-            # 乖離率
-            deviation = abs(prices - ema50) / ema50 * 100
-            
-            # ATR
-            tr1 = high - low
-            tr2 = abs(high - prices.shift(1))
-            tr3 = abs(low - prices.shift(1))
-            tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-            atr = tr.ewm(span=14, adjust=False).mean()
-            
-            # 最新の値
-            current_bbw = bbw.iloc[-1]
-            current_deviation = deviation.iloc[-1]
-            current_atr = atr.iloc[-1]
-            current_price = prices.iloc[-1]
-            current_ema50 = ema50.iloc[-1]
-            
-            # 過去60日間の最小値
-            bbw_min_60d = bbw.iloc[-60:].min()
-            atr_min_60d = atr.iloc[-60:].min()
-            
-            # 検出条件
-            bbw_threshold = 1.2  # ボリンジャーバンド幅
-            deviation_threshold = 3.0  # 50EMAからの乖離率
-            atr_threshold = 1.3
-            min_duration = 7  # 継続期間（固定値）
-            
-            # 条件1: BBWが狭い
-            bbw_condition = current_bbw <= bbw_min_60d * bbw_threshold
-            
-            # 条件2: 株価がEMAに近い
-            deviation_condition = current_deviation <= deviation_threshold
-            
-            # 条件3: ATRが低い
-            atr_condition = current_atr <= atr_min_60d * atr_threshold
-            
-            # 各条件をチェックして統計を記録
-            if not bbw_condition:
-                self.squeeze_stats['bbw_failed'] += 1
-                return None
-            
-            if not deviation_condition:
-                self.squeeze_stats['deviation_failed'] += 1
-                return None
-            
-            if not atr_condition:
-                self.squeeze_stats['atr_failed'] += 1
-                return None
-            
-            # 継続日数を計算
-            duration = 0
-            for i in range(1, min(len(prices), 30)):  # 最大30日まで遡る
-                idx = -i
-                if (bbw.iloc[idx] <= bbw_min_60d * bbw_threshold and
-                    deviation.iloc[idx] <= deviation_threshold * 1.4 and
-                    atr.iloc[idx] <= atr_min_60d * atr_threshold):
-                    duration += 1
-                else:
-                    break
-            
-            # 最小継続期間を満たすか確認
-            if duration < min_duration:
-                self.squeeze_stats['duration_failed'] += 1
-                return None
-            
-            # 条件5: EMA50が平坦（凪状態の確認）
-            # 20日前のEMA50との差が株価の2%以内 → 上昇中・下落中を除外
-            if len(ema50) >= 20:
-                ema50_now = float(ema50.iloc[-1])
-                ema50_20d_ago = float(ema50.iloc[-20])
-                ema50_change_pct = abs(ema50_now - ema50_20d_ago) / ema50_20d_ago * 100
-                if ema50_change_pct > 2.0:
-                    self.squeeze_stats['ema50_flat_failed'] += 1
-                    logger.debug(f"[{code}] EMA50が平坦でない: 20日変化率={ema50_change_pct:.1f}% > 2%")
-                    return None
-            
-            # すべての条件を満たした
-            self.squeeze_stats['passed_all'] += 1
-            logger.info(f"✅ スクイーズ検出 [{code}]: 継続{duration}日")
-            
-            # 検出結果を返す
-            return {
-                "code": code,
-                "name": name,
-                "price": float(current_price),
-                "market": self._market_code_to_name(market),
-                "current_bbw": float(current_bbw),
-                "bbw_min_60d": float(bbw_min_60d),
-                "bbw_ratio": float(current_bbw / bbw_min_60d) if bbw_min_60d > 0 else None,
-                "deviation_from_ema": float(current_deviation),
-                "current_atr": float(current_atr),
-                "atr_min_60d": float(atr_min_60d),
-                "atr_ratio": float(current_atr / atr_min_60d) if atr_min_60d > 0 else None,
-                "duration_days": int(duration),
-                "ema_50": float(current_ema50),
-                "volume": int(df.iloc[-1].get('Volume', 0))
-            }
-            
-        except Exception as e:
-            logger.debug(f"スクリーニングエラー [{code}]: {e}")
-            return None
-    
     async def process_stocks_batch(self, stocks: List[Dict], screening_func, method_name: str):
         """銘柄のバッチ処理"""
         self.progress["total"] = len(stocks)
@@ -1472,40 +1289,6 @@ class StockScreener:
         if screening_id:
             self.sb_client.save_detected_stocks(screening_id, week52_pullback_sampled)
         
-        # スクイーズ（価格収縮）
-        logger.info("=" * 60)
-        logger.info("スクイーズ（価格収縮）スクリーニング開始")
-        sq_start = datetime.now()
-        squeeze = await self.process_stocks_batch(
-            stocks, self.screen_stock_squeeze, "スクイーズ"
-        )
-        sq_time = int((datetime.now() - sq_start).total_seconds() * 1000)
-        logger.info(f"スクイーズ検出: {len(squeeze)}銘柄 ({sq_time}ms)")
-        
-        # 間引き処理
-        squeeze_sampled = sample_stocks_balanced(squeeze, max_per_range=10)
-        
-        screening_id = self.sb_client.save_screening_result(
-            "squeeze", datetime.now().strftime('%Y-%m-%d'),
-            len(squeeze), sq_time  # 元の検出数
-        )
-        if screening_id:
-            # duration_daysをstochastic_kカラムに保存（additional_dataカラム非存在のため）
-            stocks_with_duration = []
-            for s in squeeze_sampled:
-                stock_data = {
-                    "code": s["code"],
-                    "name": s["name"],
-                    "price": s["price"],
-                    "market": s["market"],
-                    "volume": s.get("volume", 0),
-                    "ema_50": s.get("ema_50"),
-                    "stochastic_k": s["duration_days"],  # duration_daysをstochastic_kに流用
-                }
-                stocks_with_duration.append(stock_data)
-            
-            self.sb_client.save_detected_stocks(screening_id, stocks_with_duration)
-        
         total_time = (datetime.now() - start_time).total_seconds()
         logger.info("=" * 60)
         # キャッシュ統計を出力
@@ -1536,7 +1319,6 @@ class StockScreener:
             "breakout": breakout,
             "bollinger_band": bollinger_band,
             "200day_pullback": week52_pullback,
-            "squeeze": squeeze
         }
 
 
