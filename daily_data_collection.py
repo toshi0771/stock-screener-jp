@@ -55,11 +55,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 設定
-CONCURRENT_REQUESTS = 1  # 同時実行数（レート制限対応: 60件/分 = 1件/秒）
+CONCURRENT_REQUESTS = 3  # 同時実行数（Lightプラン: 30req/分 → 3並列×6秒=安全）
 HISTORY_DAYS = 90
 RETRY_COUNT = 3
 RETRY_DELAY = 2
-API_CALL_DELAY = 2.0  # APIコール間の待機時間（秒）（レート制限対応: 1.1→2.0秒）
+API_CALL_DELAY = 6.0  # APIコール間の待機時間（秒）（3並列×6秒=18秒に3req → 10req/分）
 
 
 def safe_float(value, default=None):
@@ -665,11 +665,12 @@ class StockScreener:
                 "total": 0,
                 "has_data": 0,
                 "data_insufficient": 0,
-                "passed_box": 0,        # ボックス幅条件通過
-                "passed_breakout": 0,   # 高値ブレイク条件通過
-                "passed_volume": 0,     # ATR条件通過
-                "passed_ema": 0,        # EMA50条件通過
-                "passed_convergence": 0, # 3EMA収束条件通過
+                "passed_box": 0,          # ボックス幅条件通過
+                "passed_ema_accel": 0,    # EMA加速条件通過（パターンA）
+                "passed_breakout": 0,     # 高値ブレイク条件通過
+                "passed_volume": 0,       # ATR条件通過
+                "passed_ema": 0,          # EMA50条件通過
+                "passed_convergence": 0,  # 3EMA収束条件通過
                 "final_detected": 0
             }
 
@@ -705,34 +706,61 @@ class StockScreener:
             current_price = float(latest['Close'])
             current_volume = float(latest.get('Volume', 0))
 
-            # ── 条件1: ボックス幅チェック（持ち合い確認）──────────────────
-            # ブレイク直前の持ち合いを確認するため、直近5日を除いた期間で判定
+            # ── 条件1: ボックス幅チェック OR EMA加速チェック ──────────────
+            # パターンA（加速型）とパターンB（横ばいブレイク型）の両方を捉える
+
+            # ボックス幅チェック（パターンB: 横ばい持ち合いからの上放れ）
             df_range = df.iloc[-(lookback):-5] if len(df) > (lookback + 5) else df.iloc[:-5]
-            if len(df_range) < 10:
+            box_high = 0.0
+            box_width_pct = 999.0
+            is_box_pattern = False
+
+            if len(df_range) >= 10:
+                box_high = float(df_range['High'].max())
+                box_low  = float(df_range['Low'].min())
+                if box_low > 0:
+                    box_width_pct = (box_high - box_low) / box_low * 100
+                    if box_width_pct <= 20:
+                        is_box_pattern = True
+
+            # EMA加速チェック（パターンA: 緩やかな上昇が急加速）
+            # EMA20の直近10日傾きが前10日傾きの1.5倍以上
+            is_ema_accel_pattern = False
+            ema20_series = self.calculate_ema(df['Close'], 20)
+            if len(ema20_series) >= 21:
+                ema20_recent_slope = (float(ema20_series.iloc[-1]) - float(ema20_series.iloc[-10])) / float(ema20_series.iloc[-10]) * 100
+                ema20_prev_slope   = (float(ema20_series.iloc[-11]) - float(ema20_series.iloc[-20])) / float(ema20_series.iloc[-20]) * 100
+                # 上昇中かつ加速率が1.5倍以上
+                if ema20_recent_slope > 0 and ema20_prev_slope > 0 and ema20_recent_slope >= ema20_prev_slope * 1.5:
+                    is_ema_accel_pattern = True
+
+            if not is_box_pattern and not is_ema_accel_pattern:
+                logger.debug(f"[{code}] ボックス幅超過({box_width_pct:.1f}%)かつEMA加速なし → スキップ")
                 return None
 
-            box_high = float(df_range['High'].max())
-            box_low = float(df_range['Low'].min())
-            if box_low <= 0:
-                return None
-
-            box_width_pct = (box_high - box_low) / box_low * 100
-
-            # ボックス幅が20%超 → 持ち合いではなくトレンド相場とみなしてスキップ
-            if box_width_pct > 20:
-                logger.debug(f"[{code}] ボックス幅超過: {box_width_pct:.1f}% > 20%")
-                return None
-
-            self.perfect_order_stats["passed_box"] += 1
+            if is_box_pattern:
+                self.perfect_order_stats["passed_box"] += 1
+            if is_ema_accel_pattern:
+                self.perfect_order_stats["passed_ema_accel"] += 1
 
             # ── 条件2: 高値ブレイクアウト確認（直近5日以内）──────────────
+            # パターンB: ボックス高値を更新
+            # パターンA: 直近20日高値を更新（加速中の銘柄は常に高値更新中）
             recent_high = float(df.iloc[-5:]['High'].max())
-            if recent_high <= box_high:
-                logger.debug(f"[{code}] ブレイクなし: 直近高値={recent_high:.0f} <= ボックス高値={box_high:.0f}")
+
+            if is_box_pattern:
+                # ボックス高値を突破しているか確認
+                ref_high = box_high
+            else:
+                # EMA加速パターン: 20日前〜6日前の高値を基準
+                ref_high = float(df.iloc[-25:-5]['High'].max()) if len(df) >= 25 else float(df.iloc[:-5]['High'].max())
+
+            if recent_high <= ref_high:
+                logger.debug(f"[{code}] ブレイクなし: 直近高値={recent_high:.0f} <= 基準高値={ref_high:.0f}")
                 return None
 
             # ブレイク率（何%上抜けたか）
-            breakout_pct = (recent_high - box_high) / box_high * 100
+            breakout_pct = (recent_high - ref_high) / ref_high * 100 if ref_high > 0 else 0
 
             self.perfect_order_stats["passed_breakout"] += 1
 
