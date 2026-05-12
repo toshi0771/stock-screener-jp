@@ -679,11 +679,11 @@ class StockScreener:
         try:
             end_date = self.latest_trading_date
 
-            # 60営業日 + バッファのため約100日分取得
-            start_str, end_str = get_date_range_for_screening(end_date, 100)
+            # 200日分取得（長期の持ち合いを正確に判定するため100→200日に拡張）
+            start_str, end_str = get_date_range_for_screening(end_date, 200)
 
             # 永続キャッシュから取得
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=120)
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
 
             if df is None:
                 df = await self.cache.get_or_fetch(
