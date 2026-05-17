@@ -97,6 +97,44 @@ async def main():
         breakout_sampled = sample_stocks_balanced(breakout, max_per_range=10)
         logger.info(f"📊 間引き後: {len(breakout_sampled)}銘柄")
         
+        # 前日との差分フィルター（新規検出銘柄を優先）
+        try:
+            yesterday = (screener.latest_trading_date - timedelta(days=3)).strftime('%Y-%m-%d')
+            prev_result = screener.sb_client.supabase.table('screening_results')\
+                .select('id')\
+                .eq('screening_type', 'breakout')\
+                .gte('screening_date', yesterday)\
+                .lt('screening_date', target_date)\
+                .order('created_at', desc=True)\
+                .limit(1)\
+                .execute()
+            
+            if prev_result.data:
+                prev_id = prev_result.data[0]['id']
+                prev_stocks = screener.sb_client.supabase.table('detected_stocks')\
+                    .select('stock_code')\
+                    .eq('screening_result_id', prev_id)\
+                    .execute()
+                prev_codes = {str(s['stock_code']) for s in prev_stocks.data}
+                
+                new_stocks = [s for s in breakout_sampled if str(s['code']) not in prev_codes]
+                cont_stocks = [s for s in breakout_sampled if str(s['code']) in prev_codes]
+                
+                logger.info(f"📊 新規検出: {len(new_stocks)}銘柄 / 継続: {len(cont_stocks)}銘柄")
+                
+                MAX_TOTAL = 90
+                if len(new_stocks) >= MAX_TOTAL:
+                    breakout_sampled = new_stocks[:MAX_TOTAL]
+                else:
+                    remaining = MAX_TOTAL - len(new_stocks)
+                    import random
+                    random.shuffle(cont_stocks)
+                    breakout_sampled = new_stocks + cont_stocks[:remaining]
+                
+                logger.info(f"📊 最終保存: {len(breakout_sampled)}銘柄（新規優先）")
+        except Exception as e:
+            logger.warning(f"前日比較スキップ: {e}")
+        
         # Supabase保存
         screening_id = screener.sb_client.save_screening_result(
             "breakout", target_date,

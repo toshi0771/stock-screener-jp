@@ -16,10 +16,10 @@ def sample_stocks_balanced(stocks: List[Dict], max_per_range: int = 10) -> List[
         1. 各銘柄コード帯（1000-1999, 2000-2999など）内で市場別に分類
         2. 各市場の銘柄数を集計
         3. 銘柄数の比率に基づいて抽出数を決定（合計max_per_range銘柄）
-        4. 各市場からランダムに抽出
+        4. 各市場からランダムに抽出（毎回異なる銘柄を返す）
     """
-    if not stocks or len(stocks) <= 100:
-        return stocks  # 100銘柄以下ならそのまま返す
+    if not stocks:
+        return stocks
     
     # 銘柄コード帯別・市場別に分類
     ranges = {}
