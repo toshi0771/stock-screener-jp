@@ -76,16 +76,14 @@ async def main():
         if hasattr(screener, 'perfect_order_stats'):
             s = screener.perfect_order_stats
             logger.info("=" * 60)
-            logger.info("📊 ブレイクアウト スクリーニング 詳細統計")
+            logger.info("📊 VCPスクリーニング 詳細統計")
             logger.info("=" * 60)
             logger.info(f"  処理対象:         {s['total']:,}銘柄")
             logger.info(f"  データ取得成功:   {s['has_data']:,}銘柄")
-            logger.info(f"  ボックス幅OK:     {s['passed_box']:,}銘柄 （幅20%以内・パターンB）")
-            logger.info(f"  EMA加速OK:        {s['passed_ema_accel']:,}銘柄 （傾き1.5倍加速・パターンA）")
-            logger.info(f"  ブレイクアウトOK: {s['passed_breakout']:,}銘柄 （直近5日で高値更新）")
-            logger.info(f"  ATRブレイクOK:    {s['passed_volume']:,}銘柄 （ATR1.5倍以上の値動き）")
-            logger.info(f"  EMA50超OK:        {s['passed_ema']:,}銘柄 （EMA50より上）")
-            logger.info(f"  3EMA収束OK:       {s['passed_convergence']:,}銘柄 （ブレイク前にEMA収束）")
+            logger.info(f"  70点以上（通過）: {s['score_70plus']:,}銘柄")
+            logger.info(f"  85点以上（強VCP）:{s['score_85plus']:,}銘柄")
+            logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
+            logger.info("=" * 60)
             logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
             logger.info("=" * 60)
         

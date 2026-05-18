@@ -646,31 +646,29 @@ class StockScreener:
             return [s for s in all_stocks_data if s.get(market_field) in market_codes]
 
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """単一銘柄のボックスブレイク（持ち合い上放れ）スクリーニング
-        
-        ハブ(3030)のような長期持ち合い後の急上昇銘柄を検出する。
-        検出条件:
-          1. 直近60営業日の値動きがボックス幅20%以内（持ち合い確認）
-          2. 直近5営業日以内に60日高値を更新（上放れ確認）
-          3. 直近5日の値幅がATR20日平均の1.5倍以上（大きな値動き確認）
-          4. 現在株価がEMA50より上（トレンド転換確認）
+        """VCP（Volatility Contraction Pattern）型スクリーニング
+
+        Mark Minervini のVCP手法を日本株向けに実装。
+        スコア制で柔軟に検出（70点以上で通過）。
+
+        スコア配分（合計100点）:
+          25点: ATR20/ATR60 < 0.8（ボラティリティ収縮）
+          20点: 出来高20日平均 < 60日平均（出来高枯れ）
+          20点: EMA20 > EMA50（上昇トレンド中）
+          20点: 現在値が60日高値の95%以上（高値圏維持）
+          15点: 20日レンジ < 60日レンジの60%（値幅収縮）
         """
         code = stock["Code"]
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         market = stock.get("Mkt", stock.get("MarketCode", ""))
 
-        # 統計情報を初期化（初回のみ）
         if not hasattr(self, 'perfect_order_stats'):
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
                 "data_insufficient": 0,
-                "passed_box": 0,          # ボックス幅条件通過
-                "passed_ema_accel": 0,    # EMA加速条件通過（パターンA）
-                "passed_breakout": 0,     # 高値ブレイク条件通過
-                "passed_volume": 0,       # ATR条件通過
-                "passed_ema": 0,          # EMA50条件通過
-                "passed_convergence": 0,  # 3EMA収束条件通過
+                "score_70plus": 0,
+                "score_85plus": 0,
                 "final_detected": 0
             }
 
@@ -678,13 +676,9 @@ class StockScreener:
 
         try:
             end_date = self.latest_trading_date
-
-            # 200日分取得（長期の持ち合いを正確に判定するため100→200日に拡張）
             start_str, end_str = get_date_range_for_screening(end_date, 200)
 
-            # 永続キャッシュから取得
             df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
-
             if df is None:
                 df = await self.cache.get_or_fetch(
                     code, start_str, end_str,
@@ -694,134 +688,75 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
 
-            if df is None or len(df) < 30:
+            if df is None or len(df) < 65:
                 return None
 
             self.perfect_order_stats["has_data"] += 1
 
-            # 直近60営業日分（足りない場合は全データ）を使用
-            lookback = min(60, len(df))
-            df_box = df.iloc[-lookback:].copy()
             latest = df.iloc[-1]
             current_price = float(latest['Close'])
             current_volume = float(latest.get('Volume', 0))
 
-            # ── 条件1: ボックス幅チェック OR EMA加速チェック ──────────────
-            # パターンA（加速型）とパターンB（横ばいブレイク型）の両方を捉える
-
-            # ボックス幅チェック（パターンB: 横ばい持ち合いからの上放れ）
-            df_range = df.iloc[-(lookback):-5] if len(df) > (lookback + 5) else df.iloc[:-5]
-            box_high = 0.0
-            box_width_pct = 999.0
-            is_box_pattern = False
-
-            if len(df_range) >= 10:
-                box_high = float(df_range['High'].max())
-                box_low  = float(df_range['Low'].min())
-                if box_low > 0:
-                    box_width_pct = (box_high - box_low) / box_low * 100
-                    if box_width_pct <= 20:
-                        is_box_pattern = True
-
-            # EMA加速チェック（パターンA: 緩やかな上昇が急加速）
-            # EMA20の直近10日傾きが前10日傾きの1.5倍以上
-            is_ema_accel_pattern = False
-            ema20_series = self.calculate_ema(df['Close'], 20)
-            if len(ema20_series) >= 21:
-                ema20_recent_slope = (float(ema20_series.iloc[-1]) - float(ema20_series.iloc[-10])) / float(ema20_series.iloc[-10]) * 100
-                ema20_prev_slope   = (float(ema20_series.iloc[-11]) - float(ema20_series.iloc[-20])) / float(ema20_series.iloc[-20]) * 100
-                # 上昇中かつ加速率が1.5倍以上
-                if ema20_recent_slope > 0 and ema20_prev_slope > 0 and ema20_recent_slope >= ema20_prev_slope * 1.5:
-                    is_ema_accel_pattern = True
-
-            if not is_box_pattern and not is_ema_accel_pattern:
-                logger.debug(f"[{code}] ボックス幅超過({box_width_pct:.1f}%)かつEMA加速なし → スキップ")
-                return None
-
-            if is_box_pattern:
-                self.perfect_order_stats["passed_box"] += 1
-            if is_ema_accel_pattern:
-                self.perfect_order_stats["passed_ema_accel"] += 1
-
-            # ── 条件2: 高値ブレイクアウト確認（直近5日以内）──────────────
-            # パターンB: ボックス高値を更新
-            # パターンA: 直近20日高値を更新（加速中の銘柄は常に高値更新中）
-            recent_high = float(df.iloc[-5:]['High'].max())
-
-            if is_box_pattern:
-                # ボックス高値を突破しているか確認
-                ref_high = box_high
-            else:
-                # EMA加速パターン: 20日前〜6日前の高値を基準
-                ref_high = float(df.iloc[-25:-5]['High'].max()) if len(df) >= 25 else float(df.iloc[:-5]['High'].max())
-
-            if recent_high <= ref_high:
-                logger.debug(f"[{code}] ブレイクなし: 直近高値={recent_high:.0f} <= 基準高値={ref_high:.0f}")
-                return None
-
-            # ブレイク率（何%上抜けたか）
-            breakout_pct = (recent_high - ref_high) / ref_high * 100 if ref_high > 0 else 0
-
-            self.perfect_order_stats["passed_breakout"] += 1
-
-            # ── 条件3: ATRブレイク確認（普段より大きな値動き）──────────────
-            # ATR（Average True Range）= 過去20日の真値幅の平均
-            # 真値幅 = max(High-Low, |High-前日Close|, |Low-前日Close|)
-            df_atr = df.iloc[-lookback:].copy()
-            df_atr['prev_close'] = df_atr['Close'].shift(1)
-            df_atr['tr'] = df_atr[['High', 'prev_close']].max(axis=1) - df_atr[['Low', 'prev_close']].min(axis=1)
-            atr_20 = float(df_atr['tr'].iloc[-20:].mean())
-
-            # 直近5日の最大値幅
-            recent_range = float(df.iloc[-5:]['High'].max()) - float(df.iloc[-5:]['Low'].min())
-            atr_ratio = recent_range / atr_20 if atr_20 > 0 else 0
-
-            if atr_ratio < 1.5:
-                logger.debug(f"[{code}] ATR不足: {atr_ratio:.2f}倍 < 1.5倍")
-                return None
-
-            self.perfect_order_stats["passed_volume"] += 1
-
-            # ── 条件4: EMA50より上（トレンド転換確認）───────────────────
-            df['EMA50'] = self.calculate_ema(df['Close'], 50)
-            df['EMA20'] = self.calculate_ema(df['Close'], 20)
+            # EMA計算
             df['EMA10'] = self.calculate_ema(df['Close'], 10)
-            latest = df.iloc[-1]  # EMA計算後に再取得
+            df['EMA20'] = self.calculate_ema(df['Close'], 20)
+            df['EMA50'] = self.calculate_ema(df['Close'], 50)
+            latest = df.iloc[-1]
 
-            if current_price < float(latest['EMA50']):
-                logger.debug(f"[{code}] EMA50未満: Close={current_price:.0f} < EMA50={latest['EMA50']:.0f}")
+            # True Range計算
+            df_tr = df.copy()
+            df_tr['prev_close'] = df_tr['Close'].shift(1)
+            df_tr['tr'] = df_tr[['High', 'prev_close']].max(axis=1) - df_tr[['Low', 'prev_close']].min(axis=1)
+
+            # ── VCPスコア計算 ──────────────────────────────────────────
+            score = 0
+
+            # 【25点】ATR20/ATR60 < 0.8（ボラティリティ収縮）
+            atr_20 = float(df_tr['tr'].iloc[-20:].mean())
+            atr_60 = float(df_tr['tr'].iloc[-60:].mean())
+            atr_ratio = atr_20 / atr_60 if atr_60 > 0 else 1.0
+            if atr_ratio < 0.8:
+                score += 25
+
+            # 【20点】出来高20日平均 < 60日平均（出来高枯れ）
+            vol_20 = float(df['Volume'].iloc[-20:].mean())
+            vol_60 = float(df['Volume'].iloc[-60:].mean())
+            vol_ratio = vol_20 / vol_60 if vol_60 > 0 else 1.0
+            if vol_ratio < 1.0:
+                score += 20
+
+            # 【20点】EMA20 > EMA50（上昇トレンド中）
+            ema20_now = float(latest['EMA20'])
+            ema50_now = float(latest['EMA50'])
+            if ema20_now > ema50_now:
+                score += 20
+
+            # 【20点】現在値が60日高値の95%以上（高値圏維持）
+            high_60 = float(df['High'].iloc[-60:].max())
+            near_high_ratio = current_price / high_60 if high_60 > 0 else 0
+            if near_high_ratio >= 0.95:
+                score += 20
+
+            # 【15点】20日レンジ < 60日レンジの60%（値幅収縮）
+            range_20 = float(df['High'].iloc[-20:].max()) - float(df['Low'].iloc[-20:].min())
+            range_60 = float(df['High'].iloc[-60:].max()) - float(df['Low'].iloc[-60:].min())
+            range_ratio = range_20 / range_60 if range_60 > 0 else 1.0
+            if range_ratio < 0.6:
+                score += 15
+
+            # ── スコア判定 ──────────────────────────────────────────────
+            if score < 70:
+                logger.debug(f"[{code}] VCPスコア不足: {score}点")
                 return None
 
-            self.perfect_order_stats["passed_ema"] += 1
+            if score >= 70:
+                self.perfect_order_stats["score_70plus"] += 1
+            if score >= 85:
+                self.perfect_order_stats["score_85plus"] += 1
 
-            # ── 条件5: 直近でEMAが収束していたか確認（3EMA収束後の上放れ）──
-            # ブレイク直前（5〜15日前）の時点でEMA10とEMA50の差が株価の5%以内
-            # → 「すでに上がりきった銘柄」は3EMAが大きく開いているので除外
-            convergence_detected = False
-            for i in range(5, 16):  # 5日前〜15日前の間でいずれか収束していればOK
-                if len(df) > i:
-                    past = df.iloc[-(i+1)]
-                    past_ema10 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 10).iloc[-1])
-                    past_ema50 = float(self.calculate_ema(df['Close'].iloc[:-(i)], 50).iloc[-1])
-                    past_price = float(past['Close'])
-                    if past_price > 0:
-                        ema_diff_pct = abs(past_ema10 - past_ema50) / past_price * 100
-                        if ema_diff_pct <= 5.0:
-                            convergence_detected = True
-                            break
-
-            if not convergence_detected:
-                logger.debug(f"[{code}] 3EMA収束なし: ブレイク前5〜15日間でEMA10-EMA50差が5%超")
-                return None
-
-            self.perfect_order_stats["passed_convergence"] += 1
             self.perfect_order_stats["final_detected"] += 1
 
-            logger.debug(
-                f"[{code}] ✅ ボックスブレイク検出: "
-                f"ボックス幅={box_width_pct:.1f}%, ブレイク率={breakout_pct:.1f}%, "
-                f"ATR倍率={atr_ratio:.2f}倍"
-            )
+            logger.debug(f"[{code}] ✅ VCP: {score}点 ATR={atr_ratio:.2f} Vol={vol_ratio:.2f} HighRatio={near_high_ratio:.2f}")
 
             return {
                 "code": code,
@@ -832,16 +767,17 @@ class StockScreener:
                 "ema50": float(latest['EMA50']),
                 "market": self._market_code_to_name(market),
                 "volume": int(current_volume),
-                "pullback_pct": round(box_width_pct, 2),   # ボックス幅
-                "week52_high": round(box_high, 2),          # ボックス高値
-                "stochastic_k": round(breakout_pct, 2),     # ブレイク率
-                "stochastic_d": round(atr_ratio, 2),        # ATR倍率
+                "pullback_pct": round(atr_ratio * 100, 2),       # ATR比率×100
+                "week52_high": round(high_60, 2),                 # 60日高値
+                "stochastic_k": round(score, 2),                  # VCPスコア
+                "stochastic_d": round(near_high_ratio * 100, 2),  # 高値圏維持率×100
             }
 
         except Exception as e:
             logger.debug(f"スクリーニングエラー [{code}]: {e}")
             return None
-    
+
+
     async def screen_stock_bollinger_band(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """単一銘柄のボリンジャーバンドスクリーニング"""
         code = stock["Code"]
