@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: stock-screening
+  group: screening-bollinger-band
   cancel-in-progress: false
 
 jobs:

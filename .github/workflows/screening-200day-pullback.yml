@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: stock-screening
+  group: screening-200day-pullback
   cancel-in-progress: false
 
 jobs:
