@@ -55,11 +55,11 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # 設定
-CONCURRENT_REQUESTS = 3  # 同時実行数（Lightプラン: 30req/分 → 3並列×6秒=安全）
+CONCURRENT_REQUESTS = 1  # 同時実行数（レート制限対応: 安全のため1に戻す）
 HISTORY_DAYS = 90
 RETRY_COUNT = 3
 RETRY_DELAY = 2
-API_CALL_DELAY = 6.0  # APIコール間の待機時間（秒）（3並列×6秒=18秒に3req → 10req/分）
+API_CALL_DELAY = 2.0  # APIコール間の待機時間（秒）（1並列×2秒 = 30req/分以内）
 
 
 def safe_float(value, default=None):
