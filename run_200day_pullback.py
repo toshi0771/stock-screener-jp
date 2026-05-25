@@ -115,7 +115,7 @@ async def main():
         # 前日との差分フィルター（新規検出銘柄を優先）
         try:
             yesterday = (screener.latest_trading_date - timedelta(days=3)).strftime('%Y-%m-%d')
-            prev_result = screener.sb_client.supabase.table('screening_results')\
+            prev_result = screener.sb_client.client.table('screening_results')\
                 .select('id')\
                 .eq('screening_type', '200day_pullback')\
                 .gte('screening_date', yesterday)\
@@ -126,7 +126,7 @@ async def main():
             
             if prev_result.data:
                 prev_id = prev_result.data[0]['id']
-                prev_stocks = screener.sb_client.supabase.table('detected_stocks')\
+                prev_stocks = screener.sb_client.client.table('detected_stocks')\
                     .select('stock_code')\
                     .eq('screening_result_id', prev_id)\
                     .execute()

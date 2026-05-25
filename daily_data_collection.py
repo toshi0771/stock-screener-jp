@@ -828,6 +828,15 @@ class StockScreener:
             
             latest = df.iloc[-1]
             
+            # デバッグ: キャッシュデータの最新日付と乖離率をサンプル出力
+            if code in ["7203", "6758", "9984"]:  # トヨタ・ソニー・ソフトバンクでサンプル確認
+                latest_date = latest.get('Date', 'unknown')
+                upper_ratio = (float(latest['Close']) / float(latest['Upper3']) - 1) * 100
+                lower_ratio = (float(latest['Lower3']) / float(latest['Close']) - 1) * 100
+                logger.info(f"🔍 BB Debug [{code}]: 最新日={latest_date}, Close={latest['Close']:.0f}, "
+                           f"Upper3={latest['Upper3']:.0f}({upper_ratio:+.1f}%), "
+                           f"Lower3={latest['Lower3']:.0f}({lower_ratio:+.1f}%)")
+            
             # ±3σタッチ判定
             if latest['Close'] >= latest['Upper3'] or latest['Close'] <= latest['Lower3']:
                 touch_direction = "upper" if latest['Close'] >= latest['Upper3'] else "lower"
@@ -952,8 +961,10 @@ class StockScreener:
             # 新高値からの下落率
             pullback_pct = ((high_200d - current_price) / high_200d) * 100
             
-            # 条件2: 200日新高値から30%以内の押し目
-            if pullback_pct <= 30:
+            # 条件2: 200日新高値から 2%〜30% の押し目
+            # ・2%未満 → 高値圏そのもの（押し目でない）
+            # ・30%超  → 下落しすぎ（トレンド崩壊の可能性）
+            if 2 <= pullback_pct <= 30:
                 self.pullback_stats['within_30pct'] += 1
             else:
                 return None
@@ -986,25 +997,26 @@ class StockScreener:
                 logger.info(f"下落率: {pullback_pct:.2f}%")
             
             # EMA10タッチ判定：ローソク足の範囲内にEMAがあるか
-            if low_price <= latest['EMA10'] <= high_price:
+            # かつ終値がEMAより上（下落中にEMAを下抜けするケースを除外）
+            if low_price <= latest['EMA10'] <= high_price and close_price >= latest['EMA10']:
                 touched_emas.append("10EMA")
                 self.pullback_stats['ema10_touch'] += 1
             
             # EMA20タッチ判定
-            if low_price <= latest['EMA20'] <= high_price:
+            if low_price <= latest['EMA20'] <= high_price and close_price >= latest['EMA20']:
                 touched_emas.append("20EMA")
                 self.pullback_stats['ema20_touch'] += 1
             
             # EMA50タッチ判定
-            if low_price <= latest['EMA50'] <= high_price:
+            if low_price <= latest['EMA50'] <= high_price and close_price >= latest['EMA50']:
                 touched_emas.append("50EMA")
                 self.pullback_stats['ema50_touch'] += 1
             
             if is_debug_target:
-                logger.info(f"\nタッチ判定:")
-                logger.info(f"  EMA10タッチ: {low_price} <= {latest['EMA10']:.2f} <= {high_price} → {'✅' if '10EMA' in touched_emas else '❌'}")
-                logger.info(f"  EMA20タッチ: {low_price} <= {latest['EMA20']:.2f} <= {high_price} → {'✅' if '20EMA' in touched_emas else '❌'}")
-                logger.info(f"  EMA50タッチ: {low_price} <= {latest['EMA50']:.2f} <= {high_price} → {'✅' if '50EMA' in touched_emas else '❌'}")
+                logger.info(f"\nタッチ判定（安値≦EMA≦高値 かつ 終値≧EMA）:")
+                logger.info(f"  EMA10タッチ: {low_price} <= {latest['EMA10']:.2f} <= {high_price} & close{close_price}>={latest['EMA10']:.2f} → {'✅' if '10EMA' in touched_emas else '❌'}")
+                logger.info(f"  EMA20タッチ: {low_price} <= {latest['EMA20']:.2f} <= {high_price} & close{close_price}>={latest['EMA20']:.2f} → {'✅' if '20EMA' in touched_emas else '❌'}")
+                logger.info(f"  EMA50タッチ: {low_price} <= {latest['EMA50']:.2f} <= {high_price} & close{close_price}>={latest['EMA50']:.2f} → {'✅' if '50EMA' in touched_emas else '❌'}")
                 logger.info(f"タッチしたEMA: {touched_emas if touched_emas else 'なし'}")
                 logger.info(f"{'='*60}\n")
             
