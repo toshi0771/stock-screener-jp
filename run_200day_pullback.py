@@ -152,6 +152,13 @@ async def main():
         except Exception as e:
             logger.warning(f"前日比較スキップ: {e}")
         
+        # 銘柄コード昇順でソート（表示順を一定にする）
+        week52_pullback_sampled = sorted(
+            week52_pullback_sampled,
+            key=lambda x: str(x.get('code', ''))
+        )
+        logger.info(f"📊 コード昇順ソート完了: {len(week52_pullback_sampled)}銘柄")
+        
         # Supabase保存
         screening_id = screener.sb_client.save_screening_result(
             "200day_pullback", target_date,

@@ -890,16 +890,9 @@ class StockScreener:
         # 文字列比較を確実にするため、両方を文字列に変換
         is_debug_target = debug_mode and str(code) == str(debug_stock_code)
         
-        # 6954の場合は必ずログ出力（デバッグモード関係なく）
-        if code == "6954":
-            logger.info(f"⚡⚡⚡ 6954検出！ screen_stock_200day_pullback() 開始 - {name}({code})")
-            logger.info(f"⚡ debug_mode={debug_mode}, debug_stock_code='{debug_stock_code}', code='{code}'")
-            logger.info(f"⚡ is_debug_target={is_debug_target}")
-        
-        # デバッグ：関数に入ったことを確認
+        # デバッグ対象銘柄のみ詳細ログ出力
         if is_debug_target:
             logger.info(f"⚡ DEBUG: screen_stock_200day_pullback() 開始 - {name}({code})")
-            logger.info(f"⚡ DEBUG: debug_mode={debug_mode}, debug_stock_code={debug_stock_code}")
         
         try:
             # キャッシュされた最新の取引日を使用

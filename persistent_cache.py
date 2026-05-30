@@ -160,19 +160,8 @@ class PersistentPriceCache:
             last_update = datetime.strptime(last_date, '%Y%m%d')
             age = datetime.now() - last_update
             
-            # 🔍 デバッグログ追加：有名銘柄で確認
-            if stock_code in ["6954", "7203", "9984", "6758", "8306"]:
-                logger.info(f"🔍 DEBUG キャッシュ日付チェック [{stock_code}]:")
-                logger.info(f"  - last_date（キャッシュ最終日）: {last_date}")
-                logger.info(f"  - age.days（経過日数）: {age.days}日")
-                logger.info(f"  - max_age_days（許容日数）: {max_age_days}日")
-                logger.info(f"  - 判定: {'❌ 期限切れ' if age.days > max_age_days else '✅ 有効'}")
-            
             if age.days > max_age_days:
                 logger.debug(f"キャッシュ期限切れ: {stock_code} (最終更新: {last_date}, {age.days}日前)")
-                # 🔍 デバッグログ追加
-                if stock_code in ["6954", "7203", "9984", "6758", "8306"]:
-                    logger.info(f"🔍 DEBUG [{stock_code}]: キャッシュ無効判定！ {age.days} > {max_age_days}")
                 self.misses += 1
                 return None
         except Exception as e:
@@ -187,41 +176,39 @@ class PersistentPriceCache:
                 start_dt = pd.to_datetime(start_date, format='%Y%m%d')
                 end_dt = pd.to_datetime(end_date, format='%Y%m%d')
                 
+                # ★重要: キャッシュの最新日がend_dtより5日以上古い場合は無効
+                # 例: 5/26障害でキャッシュ更新されず → 5/25のデータが5/29の判定に使われる問題を防ぐ
+                cache_latest_date = df['Date'].max()
+                date_gap = (end_dt - cache_latest_date).days
+                if date_gap > 5:
+                    logger.debug(f"キャッシュデータが古い: {stock_code} "
+                                f"(要求終了日: {end_dt.date()}, "
+                                f"キャッシュ最新日: {cache_latest_date.date()}, "
+                                f"差: {date_gap}日)")
+                    self.misses += 1
+                    return None
+                
                 filtered_df = df[(df['Date'] >= start_dt) & (df['Date'] <= end_dt)].copy()
                 
-                # デバッグログ: フィルタリング結果
                 logger.debug(f"  第1フィルター: {len(filtered_df)}行 (start_dt <= Date <= end_dt)")
                 
-                # 必要な期間のデータが十分にあるか確認
                 if len(filtered_df) > 0:
                     self.hits += 1
                     logger.debug(f"  ✅ キャッシュヒット: {stock_code} ({len(filtered_df)}行)")
                     return filtered_df
                 
-                # end_dt が最新データより新しい場合、start_dt以降のすべてのデータを返す
-                # （土日実行時のキャッシュミスマッチ対策）
+                # end_dt が最新データより新しい場合（土日・祝日対策）
+                # date_gap <= 5 が保証済みなので安全
                 filtered_df = df[df['Date'] >= start_dt].copy()
                 
-                # デバッグログ: 第2フィルター結果
                 logger.debug(f"  第2フィルター: {len(filtered_df)}行 (Date >= start_dt)")
                 
                 if len(filtered_df) > 0:
-                    # 🔧 データ不足チェックを一時的に無効化（データ蜂積まで）
-                    # キャッシュの最古日がstart_dtより新しい場合、データ不足と判定
-                    # cache_oldest_date = df['Date'].min()
-                    # if cache_oldest_date > start_dt:
-                    #     logger.debug(f"  ⚠️ キャッシュデータ不足: {stock_code}")
-                    #     logger.debug(f"     要求開始日: {start_dt}, キャッシュ最古日: {cache_oldest_date}")
-                    #     logger.debug(f"     差分: {(cache_oldest_date - start_dt).days}日不足")
-                    #     self.misses += 1
-                    #     return None  # APIからの追加取得を促す
-                    
                     self.hits += 1
-                    logger.debug(f"  ✅ キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行, end_dt超過)")
+                    logger.debug(f"  ✅ キャッシュヒット（部分）: {stock_code} ({len(filtered_df)}行)")
                     return filtered_df
                 else:
                     logger.debug(f"  ❌ キャッシュに必要な期間のデータなし: {stock_code}")
-                    logger.debug(f"     start_dt: {start_dt}, キャッシュ最古日: {df['Date'].min() if len(df) > 0 else 'N/A'}")
                     self.misses += 1
                     return None
             else:
