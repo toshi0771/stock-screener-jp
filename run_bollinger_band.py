@@ -111,6 +111,13 @@ async def main():
         except Exception as e:
             logger.warning(f"前日比較スキップ: {e}")
         
+        # 銘柄コード昇順でソート（表示順を一定にする）
+        bollinger_band_sampled = sorted(
+            bollinger_band_sampled,
+            key=lambda x: str(x.get('code', ''))
+        )
+        logger.info(f"📊 コード昇順ソート完了: {len(bollinger_band_sampled)}銘柄")
+
         # Supabase保存
         screening_id = screener.sb_client.save_screening_result(
             "bollinger_band", target_date,

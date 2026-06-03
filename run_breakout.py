@@ -98,6 +98,7 @@ async def main():
         # 前日との差分フィルター（新規検出銘柄を優先）
         try:
             yesterday = (screener.latest_trading_date - timedelta(days=3)).strftime('%Y-%m-%d')
+            logger.info(f"📅 前日比較: {yesterday} ～ {target_date} の範囲で検索")
             prev_result = screener.sb_client.client.table('screening_results')\
                 .select('id')\
                 .eq('screening_type', 'breakout')\
@@ -107,6 +108,7 @@ async def main():
                 .limit(1)\
                 .execute()
             
+            logger.info(f"📅 前日データ: {prev_result.data}")
             if prev_result.data:
                 prev_id = prev_result.data[0]['id']
                 prev_stocks = screener.sb_client.client.table('detected_stocks')\
@@ -133,6 +135,13 @@ async def main():
         except Exception as e:
             logger.warning(f"前日比較スキップ: {e}")
         
+        # 銘柄コード昇順でソート（表示順を一定にする）
+        breakout_sampled = sorted(
+            breakout_sampled,
+            key=lambda x: str(x.get('code', ''))
+        )
+        logger.info(f"📊 コード昇順ソート完了: {len(breakout_sampled)}銘柄")
+
         # Supabase保存
         screening_id = screener.sb_client.save_screening_result(
             "breakout", target_date,
