@@ -734,7 +734,7 @@ class StockScreener:
             # 【20点】現在値が60日高値の95%以上（高値圏維持）
             high_60 = float(df['High'].iloc[-60:].max())
             near_high_ratio = current_price / high_60 if high_60 > 0 else 0
-            if near_high_ratio >= 0.95:
+            if near_high_ratio >= 0.85:  # 0.95→0.85に緩和（下落相場対応）
                 score += 20
 
             # 【15点】20日レンジ < 60日レンジの60%（値幅収縮）
