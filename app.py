@@ -39,16 +39,25 @@ def get_latest_screening_results(screening_type, market='all'):
         print(f"\n🔍 スクリーニング検索開始", file=sys.stderr)
         print(f"   Type: {screening_type}, Market: {market}", file=sys.stderr)
         
-        # 最新のスクリーニング結果を取得（過去30日以内、フィルター条件を緩和）
-        thirty_days_ago = (datetime.now() - timedelta(days=30)).strftime('%Y-%m-%d')
+        # 当日のスクリーニング結果のみ取得（前日以前のデータは表示しない）
+        # 土日は直近の平日（金曜）を使用
+        def get_latest_weekday():
+            d = datetime.now()
+            if d.weekday() == 5:    # 土曜→金曜
+                d = d - timedelta(days=1)
+            elif d.weekday() == 6:  # 日曜→金曜
+                d = d - timedelta(days=2)
+            return d.strftime('%Y-%m-%d')
         
-        # screening_resultsテーブルから最新の結果イドを取得（total_stocks_found > 0のみ）
+        today_str = get_latest_weekday()
+        print(f"   当日取引日: {today_str}", file=sys.stderr)
+        
+        # screening_resultsテーブルから当日の結果IDのみ取得（0銘柄も含む）
         # created_atで降順ソートすることで、同日複数回実行時も最新を正しく取得
         query = supabase.table('screening_results')\
             .select('id, screening_date, total_stocks_found, market_filter, created_at')\
             .eq('screening_type', screening_type)\
-            .gt('total_stocks_found', 0)\
-            .gte('screening_date', thirty_days_ago)\
+            .eq('screening_date', today_str)\
             .order('created_at', desc=True)\
             .limit(10)
         
