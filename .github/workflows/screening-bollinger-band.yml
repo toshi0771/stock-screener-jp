@@ -17,15 +17,15 @@ jobs:
     
     steps:
     - name: Checkout repository
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
     
     - name: Restore stock price cache
-      uses: actions/cache/restore@v4
+      uses: actions/cache/restore@v5
       with:
         path: ~/.cache/stock_prices
         key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
@@ -48,7 +48,7 @@ jobs:
         python run_bollinger_band.py
     
     - name: Save stock price cache
-      uses: actions/cache/save@v4
+      uses: actions/cache/save@v5
       if: always()
       with:
         path: ~/.cache/stock_prices
