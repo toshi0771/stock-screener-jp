@@ -646,17 +646,15 @@ class StockScreener:
             return [s for s in all_stocks_data if s.get(market_field) in market_codes]
 
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """VCP（Volatility Contraction Pattern）型スクリーニング
+        """ゴールデンクロス型スクリーニング
 
-        Mark Minervini のVCP手法を日本株向けに実装。
-        スコア制で柔軟に検出（70点以上で通過）。
+        日足ベースで20EMAが50EMAを上抜けてから5日以内の銘柄を検出。
+        ローソク足とEMAの位置関係は問わない（クロスのタイミングのみで判定）。
 
-        スコア配分（合計100点）:
-          25点: ATR20/ATR60 < 0.8（ボラティリティ収縮）
-          20点: 出来高20日平均 < 60日平均（出来高枯れ）
-          20点: EMA20 > EMA50（上昇トレンド中）
-          20点: 現在値が60日高値の95%以上（高値圏維持）
-          15点: 20日レンジ < 60日レンジの60%（値幅収縮）
+        条件:
+          1. 現在: 20EMA > 50EMA
+          2. 直近5日以内に 20EMA <= 50EMA -> 20EMA > 50EMA のクロスが発生
+          3. クロス発生から6日以上経過していたら除外
         """
         code = stock["Code"]
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
@@ -666,9 +664,8 @@ class StockScreener:
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
-                "data_insufficient": 0,
-                "score_70plus": 0,
-                "score_85plus": 0,
+                "cross_found": 0,
+                "within_5days": 0,
                 "final_detected": 0
             }
 
@@ -688,89 +685,78 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
 
-            if df is None or len(df) < 65:
+            # EMA50の計算には最低60本程度のデータが必要
+            if df is None or len(df) < 60:
+                return None
+
+            # キャッシュの鮮度チェック（古いデータの使い回しを防ぐ）
+            latest_check = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest_check['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            if (end_date_obj - latest_data_date).days > 5:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
 
             self.perfect_order_stats["has_data"] += 1
 
+            # EMA計算
+            df['EMA20'] = self.calculate_ema(df['Close'], 20)
+            df['EMA50'] = self.calculate_ema(df['Close'], 50)
+
             latest = df.iloc[-1]
             current_price = float(latest['Close'])
             current_volume = float(latest.get('Volume', 0))
-
-            # EMA計算
-            df['EMA10'] = self.calculate_ema(df['Close'], 10)
-            df['EMA20'] = self.calculate_ema(df['Close'], 20)
-            df['EMA50'] = self.calculate_ema(df['Close'], 50)
-            latest = df.iloc[-1]
-
-            # True Range計算
-            df_tr = df.copy()
-            df_tr['prev_close'] = df_tr['Close'].shift(1)
-            df_tr['tr'] = df_tr[['High', 'prev_close']].max(axis=1) - df_tr[['Low', 'prev_close']].min(axis=1)
-
-            # ── VCPスコア計算 ──────────────────────────────────────────
-            score = 0
-
-            # 【25点】ATR20/ATR60 < 0.8（ボラティリティ収縮）
-            atr_20 = float(df_tr['tr'].iloc[-20:].mean())
-            atr_60 = float(df_tr['tr'].iloc[-60:].mean())
-            atr_ratio = atr_20 / atr_60 if atr_60 > 0 else 1.0
-            if atr_ratio < 0.8:
-                score += 25
-
-            # 【20点】出来高20日平均 < 60日平均（出来高枯れ）
-            vol_20 = float(df['Volume'].iloc[-20:].mean())
-            vol_60 = float(df['Volume'].iloc[-60:].mean())
-            vol_ratio = vol_20 / vol_60 if vol_60 > 0 else 1.0
-            if vol_ratio < 1.0:
-                score += 20
-
-            # 【20点】EMA20 > EMA50（上昇トレンド中）
             ema20_now = float(latest['EMA20'])
             ema50_now = float(latest['EMA50'])
-            if ema20_now > ema50_now:
-                score += 20
 
-            # 【20点】現在値が60日高値の95%以上（高値圏維持）
-            high_60 = float(df['High'].iloc[-60:].max())
-            near_high_ratio = current_price / high_60 if high_60 > 0 else 0
-            if near_high_ratio >= 0.85:  # 0.95→0.85に緩和（下落相場対応）
-                score += 20
-
-            # 【15点】20日レンジ < 60日レンジの60%（値幅収縮）
-            range_20 = float(df['High'].iloc[-20:].max()) - float(df['Low'].iloc[-20:].min())
-            range_60 = float(df['High'].iloc[-60:].max()) - float(df['Low'].iloc[-60:].min())
-            range_ratio = range_20 / range_60 if range_60 > 0 else 1.0
-            if range_ratio < 0.6:
-                score += 15
-
-            # ── スコア判定 ──────────────────────────────────────────────
-            if score < 70:
-                logger.debug(f"[{code}] VCPスコア不足: {score}点")
+            # 条件1: 現在 20EMA > 50EMA であること
+            if ema20_now <= ema50_now:
                 return None
 
-            if score >= 70:
-                self.perfect_order_stats["score_70plus"] += 1
-            if score >= 85:
-                self.perfect_order_stats["score_85plus"] += 1
+            # クロス発生日を特定: diff(EMA20-EMA50)の符号が負->正に変わった日を探す
+            df['ema_diff'] = df['EMA20'] - df['EMA50']
 
+            cross_days_ago = None
+            lookback = min(7, len(df) - 1)
+            for i in range(0, lookback):
+                idx_today = len(df) - 1 - i
+                idx_yesterday = idx_today - 1
+                if idx_yesterday < 0:
+                    break
+                diff_today = df['ema_diff'].iloc[idx_today]
+                diff_yesterday = df['ema_diff'].iloc[idx_yesterday]
+                if diff_yesterday <= 0 and diff_today > 0:
+                    cross_days_ago = i
+                    break
+
+            if cross_days_ago is None:
+                return None
+
+            self.perfect_order_stats["cross_found"] += 1
+
+            # 条件3: クロス発生から5日以内（0〜5日前）であること
+            if cross_days_ago > 5:
+                return None
+
+            self.perfect_order_stats["within_5days"] += 1
             self.perfect_order_stats["final_detected"] += 1
 
-            logger.debug(f"[{code}] ✅ VCP: {score}点 ATR={atr_ratio:.2f} Vol={vol_ratio:.2f} HighRatio={near_high_ratio:.2f}")
+            logger.debug(f"[{code}] ✅ ゴールデンクロス: {cross_days_ago}日前にクロス成立 "
+                        f"EMA20={ema20_now:.1f} EMA50={ema50_now:.1f}")
 
             return {
                 "code": code,
                 "name": name,
                 "price": current_price,
-                "ema10": float(latest['EMA10']),
-                "ema20": float(latest['EMA20']),
-                "ema50": float(latest['EMA50']),
+                "ema10": float(self.calculate_ema(df['Close'], 10).iloc[-1]),
+                "ema20": ema20_now,
+                "ema50": ema50_now,
                 "market": self._market_code_to_name(market),
                 "volume": int(current_volume),
-                "pullback_pct": round(atr_ratio * 100, 2),       # ATR比率×100
-                "week52_high": round(high_60, 2),                 # 60日高値
-                "stochastic_k": round(score, 2),                  # VCPスコア
-                "stochastic_d": round(near_high_ratio * 100, 2),  # 高値圏維持率×100
+                "pullback_pct": round((ema20_now / ema50_now - 1) * 100, 2),
+                "week52_high": round(float(df['High'].iloc[-60:].max()), 2),
+                "stochastic_k": cross_days_ago,
+                "stochastic_d": round((ema20_now / ema50_now - 1) * 100, 2),
             }
 
         except Exception as e:
@@ -810,15 +796,15 @@ class StockScreener:
             if df is None or len(df) < 20:
                 return None
             
-            # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
-            # latest = df.iloc[-1]
-            # latest_data_date = pd.to_datetime(latest['Date']).date()
-            # end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            # 
-            # # キャッシュの最新データが実行日より3日以上古い場合は除外
-            # if (end_date_obj - latest_data_date).days > 3:
-            #     logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
-            #     return None
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            
+            # キャッシュの最新データが実行日より3日以上古い場合は除外
+            # （3σは厳しい条件のため、古いデータの使い回しを確実に防ぐ）
+            if (end_date_obj - latest_data_date).days > 3:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
+                return None
             
             # ボリンジャーバンド計算
             df['SMA20'] = df['Close'].rolling(window=20).mean()

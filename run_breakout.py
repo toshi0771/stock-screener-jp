@@ -76,15 +76,13 @@ async def main():
         if hasattr(screener, 'perfect_order_stats'):
             s = screener.perfect_order_stats
             logger.info("=" * 60)
-            logger.info("📊 VCPスクリーニング 詳細統計")
+            logger.info("📊 ゴールデンクロススクリーニング 詳細統計")
             logger.info("=" * 60)
-            logger.info(f"  処理対象:         {s['total']:,}銘柄")
-            logger.info(f"  データ取得成功:   {s['has_data']:,}銘柄")
-            logger.info(f"  70点以上（通過）: {s['score_70plus']:,}銘柄")
-            logger.info(f"  85点以上（強VCP）:{s['score_85plus']:,}銘柄")
-            logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
-            logger.info("=" * 60)
-            logger.info(f"  最終検出:         {s['final_detected']:,}銘柄")
+            logger.info(f"  処理対象:           {s['total']:,}銘柄")
+            logger.info(f"  データ取得成功:     {s['has_data']:,}銘柄")
+            logger.info(f"  クロス検出:         {s['cross_found']:,}銘柄")
+            logger.info(f"  5日以内（通過）:    {s['within_5days']:,}銘柄")
+            logger.info(f"  最終検出:           {s['final_detected']:,}銘柄")
             logger.info("=" * 60)
         
         # 🔧 FIX: 既に取得済みなので再取得不要（datetimeを文字列に変換）

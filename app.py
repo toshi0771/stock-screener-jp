@@ -193,11 +193,7 @@ def api_screening():
         # Supabaseから実データを取得
         results = get_latest_screening_results(method, market)
         
-        # ブレイクアウト: ボックス幅フィルター適用
-        if method == 'breakout' and box_width_filter != 'all':
-            threshold = float(box_width_filter)
-            results = [r for r in results if r.get('pullback_pct') is not None and r.get('pullback_pct') <= threshold]
-            print(f"   ボックス幅フィルター適用後: {len(results)}件", file=sys.stderr)
+        # ゴールデンクロス手法ではボックス幅フィルターは使用しない（廃止）
         
         # ボリンジャーバンド: σフィルター適用
         if method == 'bollinger_band' and sigma_filter != 'all':

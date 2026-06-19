@@ -374,7 +374,7 @@
         <!-- ボタングリッド -->
         <div class="button-grid">
             <div class="card-button" data-method="breakout">
-                <div class="title">ブレイク<br>アウト</div>
+                <div class="title">ゴールデン<br>クロス</div>
             </div>
             <div class="card-button" data-method="bollinger_band">
                 <div class="title">ボリンジャー<br>バンド</div>
@@ -409,14 +409,9 @@
                 </select>
             </div>
             
-            <!-- ブレイクアウト専用オプション -->
+            <!-- ゴールデンクロス専用オプション（現在フィルターなし） -->
             <div class="option-group" id="breakoutOptions" style="display: none;">
-                <label class="option-label">ボックス幅フィルター</label>
-                <select class="option-select" id="boxWidthSelect">
-                    <option value="all">全て</option>
-                    <option value="10">10%以内</option>
-                    <option value="15">15%以内</option>
-                </select>
+                <!-- ボックス幅フィルターは廃止（ゴールデンクロス手法では未使用） -->
             </div>
             
             <!-- ボリンジャーバンド専用オプション -->
@@ -587,7 +582,7 @@
                             
                             // ブレイクアウト（2列）
                             html += '<div style="margin-bottom: 30px;">';
-                            html += '<h4 style="color: #059669; margin-bottom: 10px;">ブレイクアウト（持ち合い上放れ）</h4>';
+                            html += '<h4 style="color: #059669; margin-bottom: 10px;">ゴールデンクロス（20EMA&gt;50EMA）</h4>';
                             html += renderCategoryStocks(row.breakout, 'breakout');
                             html += '</div>';
                             
@@ -678,7 +673,7 @@
                     const data = await response.json();
                     
                     const methodNames = {
-                        'breakout': 'ブレイクアウト（持ち合い上放れ）',
+                        'breakout': 'ゴールデンクロス（20EMA>50EMA）',
                         'bollinger_band': 'ボリンジャーバンド±3σ',
                         '200day_pullback': '200日新高値押し目'
                     };
@@ -693,7 +688,7 @@
                         html += '<th>コード</th><th>銘柄名</th><th>市場</th><th>株価</th><th>出来高</th>';
                         
                         if (selectedMethod === 'breakout') {
-                            html += '<th>ボックス幅</th><th>ブレイク率</th><th>出来高倍率</th>';
+                            html += '<th>クロス経過日</th><th>EMA乖離率</th><th>EMA20/EMA50</th>';
                         } else if (selectedMethod === 'bollinger_band') {
                             html += '<th>SMA20</th><th>上限3σ</th><th>下限3σ</th>';
                         } else if (selectedMethod === '200day_pullback') {
@@ -718,9 +713,9 @@
                             html += `<td>${stock.volume ? stock.volume.toLocaleString() : '-'}</td>`;
                             
                             if (selectedMethod === 'breakout') {
-                                html += `<td>${stock.pullback_pct !== undefined ? stock.pullback_pct.toFixed(1) + '%' : '-'}</td>`;
-                                html += `<td>${stock.stochastic_k !== undefined ? stock.stochastic_k.toFixed(1) + '%' : '-'}</td>`;
-                                html += `<td>${stock.stochastic_d !== undefined ? stock.stochastic_d.toFixed(2) + '倍' : '-'}</td>`;
+                                html += `<td>${stock.stochastic_k !== undefined ? stock.stochastic_k + '日前' : '-'}</td>`;
+                                html += `<td>${stock.stochastic_d !== undefined ? stock.stochastic_d.toFixed(2) + '%' : '-'}</td>`;
+                                html += `<td>${stock.ema20 !== undefined && stock.ema50 !== undefined ? stock.ema20.toFixed(1) + ' / ' + stock.ema50.toFixed(1) : '-'}</td>`;
                             } else if (selectedMethod === 'bollinger_band') {
                                 html += `<td>${stock.sma20 ? stock.sma20.toFixed(2) : '-'}</td>`;
                                 html += `<td>${stock.upper_3sigma ? stock.upper_3sigma.toFixed(2) : '-'}</td>`;
