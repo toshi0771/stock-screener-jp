@@ -39,28 +39,42 @@ def get_latest_screening_results(screening_type, market='all'):
         print(f"\n🔍 スクリーニング検索開始", file=sys.stderr)
         print(f"   Type: {screening_type}, Market: {market}", file=sys.stderr)
         
-        # 当日のスクリーニング結果のみ取得（前日以前のデータは表示しない）
+        # 最新のスクリーニング結果を取得
+        # ・当日データがあれば当日を表示
+        # ・当日データがなければ直近1件を表示（夜間実行→翌日昼間閲覧に対応）
         # サーバーはUTCのため、JST（UTC+9）に変換して正しい日付を取得
-        # 土日は直近の平日（金曜）を使用
-        def get_latest_weekday_jst():
-            d = datetime.utcnow() + timedelta(hours=9)  # UTC→JST変換
-            if d.weekday() == 5:    # 土曜→金曜
-                d = d - timedelta(days=1)
-            elif d.weekday() == 6:  # 日曜→金曜
-                d = d - timedelta(days=2)
-            return d.strftime('%Y-%m-%d')
-        
-        today_str = get_latest_weekday_jst()
+        d_jst = datetime.utcnow() + timedelta(hours=9)
+        today_str = d_jst.strftime('%Y-%m-%d')
+        three_days_ago = (d_jst - timedelta(days=3)).strftime('%Y-%m-%d')
         print(f"   当日取引日(JST): {today_str}", file=sys.stderr)
         
-        # screening_resultsテーブルから当日の結果IDのみ取得（0銘柄も含む）
-        # created_atで降順ソートすることで、同日複数回実行時も最新を正しく取得
+        # まず当日データを検索
         query = supabase.table('screening_results')\
             .select('id, screening_date, total_stocks_found, market_filter, created_at')\
             .eq('screening_type', screening_type)\
             .eq('screening_date', today_str)\
             .order('created_at', desc=True)\
             .limit(10)
+        
+        today_results = query.execute()
+        
+        if today_results.data:
+            # 当日データあり → 当日を使用（0銘柄も表示）
+            screening_results = today_results
+            print(f"   当日データ使用: {today_str}", file=sys.stderr)
+        else:
+            # 当日データなし → 直近3日以内の最新データを使用
+            print(f"   当日データなし、直近データを検索...", file=sys.stderr)
+            query = supabase.table('screening_results')\
+                .select('id, screening_date, total_stocks_found, market_filter, created_at')\
+                .eq('screening_type', screening_type)\
+                .gte('screening_date', three_days_ago)\
+                .gt('total_stocks_found', 0)\
+                .order('created_at', desc=True)\
+                .limit(10)
+            screening_results = query.execute()
+            if screening_results.data:
+                print(f"   直近データ使用: {screening_results.data[0]['screening_date']}", file=sys.stderr)
         
         screening_results = query.execute()
         
