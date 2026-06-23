@@ -1,4 +1,4 @@
-name: Breakout Screening
+name: Golden Cross Screening
 
 on:
   schedule:
@@ -37,7 +37,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Breakout Screening
+    - name: Run Golden Cross Screening
       env:
         JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
         JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}

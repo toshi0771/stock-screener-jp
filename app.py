@@ -40,17 +40,18 @@ def get_latest_screening_results(screening_type, market='all'):
         print(f"   Type: {screening_type}, Market: {market}", file=sys.stderr)
         
         # 当日のスクリーニング結果のみ取得（前日以前のデータは表示しない）
+        # サーバーはUTCのため、JST（UTC+9）に変換して正しい日付を取得
         # 土日は直近の平日（金曜）を使用
-        def get_latest_weekday():
-            d = datetime.now()
+        def get_latest_weekday_jst():
+            d = datetime.utcnow() + timedelta(hours=9)  # UTC→JST変換
             if d.weekday() == 5:    # 土曜→金曜
                 d = d - timedelta(days=1)
             elif d.weekday() == 6:  # 日曜→金曜
                 d = d - timedelta(days=2)
             return d.strftime('%Y-%m-%d')
         
-        today_str = get_latest_weekday()
-        print(f"   当日取引日: {today_str}", file=sys.stderr)
+        today_str = get_latest_weekday_jst()
+        print(f"   当日取引日(JST): {today_str}", file=sys.stderr)
         
         # screening_resultsテーブルから当日の結果IDのみ取得（0銘柄も含む）
         # created_atで降順ソートすることで、同日複数回実行時も最新を正しく取得
