@@ -1,4 +1,4 @@
-name: Golden Cross Screening
+name: Hammer Screening
 
 on:
   schedule:
@@ -37,7 +37,7 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
     
-    - name: Run Golden Cross Screening
+    - name: Run Hammer Screening
       env:
         JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
         JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}

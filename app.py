@@ -136,19 +136,19 @@ def get_latest_screening_results(screening_type, market='all'):
                 'code': stock_code,
                 'name': stock['company_name'],
                 'market': stock['market'],
-                'price': float(stock['close_price']),
-                'volume': int(stock['volume']),
+                'price': float(stock['close_price']) if stock['close_price'] else 0,
+                'volume': int(stock['volume']) if stock['volume'] else 0,
             }
             
             # スクリーニング手法別の追加情報
             if screening_type == 'breakout':
+                # ハンマー手法: pullback_pct=下髭比率, stochastic_k=下髭÷実体, stochastic_d=上髭比率
                 result.update({
-                    'ema10': float(stock['ema_10']) if stock['ema_10'] else None,
-                    'ema20': float(stock['ema_20']) if stock['ema_20'] else None,
-                    'ema50': float(stock['ema_50']) if stock['ema_50'] else None,
                     'pullback_pct': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
                     'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
                     'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None,
+                    'ema20': float(stock['ema_20']) if stock['ema_20'] else None,  # 下髭の長さ(円)
+                    'ema50': float(stock['ema_50']) if stock['ema_50'] else None,  # 実体の長さ(円)
                 })
             elif screening_type == 'bollinger_band':
                 result.update({

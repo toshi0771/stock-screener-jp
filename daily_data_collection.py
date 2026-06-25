@@ -646,15 +646,16 @@ class StockScreener:
             return [s for s in all_stocks_data if s.get(market_field) in market_codes]
 
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
-        """ゴールデンクロス型スクリーニング
+        """ハンマー（下髭）型スクリーニング
 
-        日足ベースで20EMAが50EMAを上抜けてから5日以内の銘柄を検出。
-        ローソク足とEMAの位置関係は問わない（クロスのタイミングのみで判定）。
+        当日のローソク足で大きな下髭を検出。
+        「機関投資家・大口が安値で買い支えた」ことを示す強力な買いシグナル。
 
         条件:
-          1. 現在: 20EMA > 50EMA
-          2. 直近5日以内に 20EMA <= 50EMA -> 20EMA > 50EMA のクロスが発生
-          3. クロス発生から6日以上経過していたら除外
+          1. 下髭比率 >= 40%（ローソク全体の4割以上が下髭）
+          2. 下髭 >= 実体 × 1.5倍（実体より大きな下髭）
+          3. 陽線（終値 >= 始値）← 買い戻し確定
+          4. 出来高 >= 20日平均出来高（大口参加の確認）
         """
         code = stock["Code"]
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
@@ -664,8 +665,9 @@ class StockScreener:
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
-                "cross_found": 0,
-                "within_5days": 0,
+                "passed_shadow_ratio": 0,
+                "passed_shadow_body": 0,
+                "passed_bullish": 0,
                 "final_detected": 0
             }
 
@@ -673,9 +675,10 @@ class StockScreener:
 
         try:
             end_date = self.latest_trading_date
-            start_str, end_str = get_date_range_for_screening(end_date, 200)
+            # 出来高20日平均のために30日分取得
+            start_str, end_str = get_date_range_for_screening(end_date, 30)
 
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
+            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
             if df is None:
                 df = await self.cache.get_or_fetch(
                     code, start_str, end_str,
@@ -685,78 +688,78 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
 
-            # EMA50の計算には最低60本程度のデータが必要
-            if df is None or len(df) < 60:
+            if df is None or len(df) < 21:
                 return None
 
-            # キャッシュの鮮度チェック（古いデータの使い回しを防ぐ）
+            # キャッシュの鮮度チェック
             latest_check = df.iloc[-1]
             latest_data_date = pd.to_datetime(latest_check['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            if (end_date_obj - latest_data_date).days > 5:
+            if (end_date_obj - latest_data_date).days > 3:
                 logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
 
             self.perfect_order_stats["has_data"] += 1
 
-            # EMA計算
-            df['EMA20'] = self.calculate_ema(df['Close'], 20)
-            df['EMA50'] = self.calculate_ema(df['Close'], 50)
-
             latest = df.iloc[-1]
-            current_price = float(latest['Close'])
-            current_volume = float(latest.get('Volume', 0))
-            ema20_now = float(latest['EMA20'])
-            ema50_now = float(latest['EMA50'])
+            open_p   = float(latest['Open'])
+            high_p   = float(latest['High'])
+            low_p    = float(latest['Low'])
+            close_p  = float(latest['Close'])
+            volume   = float(latest.get('Volume', 0))
 
-            # 条件1: 現在 20EMA > 50EMA であること
-            if ema20_now <= ema50_now:
+            # ローソク各部の長さを計算
+            total_range   = high_p - low_p
+            body          = abs(close_p - open_p)
+            lower_body    = min(open_p, close_p)
+            upper_body    = max(open_p, close_p)
+            lower_shadow  = lower_body - low_p
+            upper_shadow  = high_p - upper_body
+
+            # 全体が0（四本値が全て同じ）は除外
+            if total_range <= 0:
                 return None
 
-            # クロス発生日を特定: diff(EMA20-EMA50)の符号が負->正に変わった日を探す
-            df['ema_diff'] = df['EMA20'] - df['EMA50']
+            lower_shadow_ratio = lower_shadow / total_range * 100   # 下髭比率(%)
+            shadow_to_body = lower_shadow / body if body > 0 else 999.9  # 下髭÷実体
 
-            cross_days_ago = None
-            lookback = min(7, len(df) - 1)
-            for i in range(0, lookback):
-                idx_today = len(df) - 1 - i
-                idx_yesterday = idx_today - 1
-                if idx_yesterday < 0:
-                    break
-                diff_today = df['ema_diff'].iloc[idx_today]
-                diff_yesterday = df['ema_diff'].iloc[idx_yesterday]
-                if diff_yesterday <= 0 and diff_today > 0:
-                    cross_days_ago = i
-                    break
+            # 条件1: 下髭比率 >= 40%
+            if lower_shadow_ratio < 40.0:
+                return None
+            self.perfect_order_stats["passed_shadow_ratio"] += 1
 
-            if cross_days_ago is None:
+            # 条件2: 下髭 >= 実体 × 1.5倍（十字線は条件スキップ）
+            if body > 0 and shadow_to_body < 1.5:
+                return None
+            self.perfect_order_stats["passed_shadow_body"] += 1
+
+            # 条件3: 陽線（終値 >= 始値）
+            if close_p < open_p:
+                return None
+            self.perfect_order_stats["passed_bullish"] += 1
+
+            # 条件4: 出来高 >= 20日平均出来高
+            vol_20avg = float(df['Volume'].iloc[-21:-1].mean())
+            if vol_20avg > 0 and volume < vol_20avg:
                 return None
 
-            self.perfect_order_stats["cross_found"] += 1
-
-            # 条件3: クロス発生から5日以内（0〜5日前）であること
-            if cross_days_ago > 5:
-                return None
-
-            self.perfect_order_stats["within_5days"] += 1
             self.perfect_order_stats["final_detected"] += 1
 
-            logger.debug(f"[{code}] ✅ ゴールデンクロス: {cross_days_ago}日前にクロス成立 "
-                        f"EMA20={ema20_now:.1f} EMA50={ema50_now:.1f}")
+            logger.debug(f"[{code}] ✅ ハンマー: 下髭比率={lower_shadow_ratio:.1f}% "
+                        f"下髭÷実体={shadow_to_body:.1f}倍 close={close_p}")
 
             return {
                 "code": code,
                 "name": name,
-                "price": current_price,
-                "ema10": float(self.calculate_ema(df['Close'], 10).iloc[-1]),
-                "ema20": ema20_now,
-                "ema50": ema50_now,
+                "price": close_p,
                 "market": self._market_code_to_name(market),
-                "volume": int(current_volume),
-                "pullback_pct": round((ema20_now / ema50_now - 1) * 100, 2),
-                "week52_high": round(float(df['High'].iloc[-60:].max()), 2),
-                "stochastic_k": cross_days_ago,
-                "stochastic_d": round((ema20_now / ema50_now - 1) * 100, 2),
+                "volume": int(volume),
+                "pullback_pct": round(lower_shadow_ratio, 1),     # 下髭比率(%) ← ソート①
+                "stochastic_k": round(min(shadow_to_body, 99.9), 2),  # 下髭÷実体 ← ソート②
+                "stochastic_d": round(upper_shadow / total_range * 100, 1),  # 上髭比率(%)
+                "week52_high": round(high_p, 2),       # 当日高値
+                "ema20": round(lower_shadow, 2),        # 下髭の長さ（円）
+                "ema50": round(body, 2),                # 実体の長さ（円）
             }
 
         except Exception as e:
