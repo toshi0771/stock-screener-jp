@@ -132,12 +132,19 @@ def get_latest_screening_results(screening_type, market='all'):
             if len(stock_code) == 5 and stock_code.startswith('0'):
                 stock_code = stock_code[1:]  # 先頭の0を削除
             
+            try:
+                price_val = float(stock['close_price']) if stock.get('close_price') is not None else 0
+                volume_val = int(stock['volume']) if stock.get('volume') is not None else 0
+            except (TypeError, ValueError):
+                price_val = 0
+                volume_val = 0
+
             result = {
                 'code': stock_code,
-                'name': stock['company_name'],
-                'market': stock['market'],
-                'price': float(stock['close_price']) if stock['close_price'] else 0,
-                'volume': int(stock['volume']) if stock['volume'] else 0,
+                'name': stock.get('company_name', ''),
+                'market': stock.get('market', ''),
+                'price': price_val,
+                'volume': volume_val,
             }
             
             # スクリーニング手法別の追加情報

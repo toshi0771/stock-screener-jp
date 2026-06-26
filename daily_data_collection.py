@@ -722,25 +722,27 @@ class StockScreener:
 
             lower_shadow_ratio = lower_shadow / total_range * 100   # 下髭比率(%)
             shadow_to_body = lower_shadow / body if body > 0 else 999.9  # 下髭÷実体
+            is_bullish = close_p >= open_p  # 陽線かどうか
 
-            # 条件1: 下髭比率 >= 40%
-            if lower_shadow_ratio < 40.0:
+            # 条件1: 下髭比率 >= 35%（緩和: 40%→35%）
+            if lower_shadow_ratio < 35.0:
                 return None
             self.perfect_order_stats["passed_shadow_ratio"] += 1
 
-            # 条件2: 下髭 >= 実体 × 1.5倍（十字線は条件スキップ）
-            if body > 0 and shadow_to_body < 1.5:
+            # 条件2: 下髭 >= 実体 × 1.0倍（緩和: 1.5倍→1.0倍）
+            # 十字線（実体ゼロ）は条件スキップ
+            if body > 0 and shadow_to_body < 1.0:
                 return None
             self.perfect_order_stats["passed_shadow_body"] += 1
 
-            # 条件3: 陽線（終値 >= 始値）
-            if close_p < open_p:
+            # 条件3: 陽線 または 下髭比率 >= 60%（強い下髭なら陰線も通過）
+            if close_p < open_p and lower_shadow_ratio < 60.0:
                 return None
             self.perfect_order_stats["passed_bullish"] += 1
 
-            # 条件4: 出来高 >= 20日平均出来高
+            # 条件4: 出来高 >= 20日平均の50%以上（緩和: 100%→50%）
             vol_20avg = float(df['Volume'].iloc[-21:-1].mean())
-            if vol_20avg > 0 and volume < vol_20avg:
+            if vol_20avg > 0 and volume < vol_20avg * 0.5:
                 return None
 
             self.perfect_order_stats["final_detected"] += 1
