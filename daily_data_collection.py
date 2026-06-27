@@ -926,7 +926,11 @@ class StockScreener:
             df['EMA20'] = self.calculate_ema(df['Close'], 20)
             df['EMA50'] = self.calculate_ema(df['Close'], 50)
             
-            # 200日最高値（利用可能なデータの範囲内で計算、最大200日）
+            # 200日最高値（最低100日分のデータが必要）
+            # データ不足の場合は除外（30日データで200日高値を計算する誤りを防ぐ）
+            if len(df) < 100:
+                logger.debug(f"[{code}] データ不足: {len(df)}日分（100日以上必要）")
+                return None
             lookback_days = min(200, len(df))
             high_200d = df['High'].tail(lookback_days).max()
             latest = df.iloc[-1]

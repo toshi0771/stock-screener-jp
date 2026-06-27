@@ -76,8 +76,6 @@ def get_latest_screening_results(screening_type, market='all'):
             if screening_results.data:
                 print(f"   直近データ使用: {screening_results.data[0]['screening_date']}", file=sys.stderr)
         
-        screening_results = query.execute()
-        
         print(f"   検索結果: {len(screening_results.data)}件", file=sys.stderr)
         
         if not screening_results.data or len(screening_results.data) == 0:

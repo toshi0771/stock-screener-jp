@@ -138,15 +138,16 @@ async def main():
                 
                 logger.info(f"📊 新規検出: {len(new_stocks)}銘柄 / 継続: {len(cont_stocks)}銘柄")
                 
-                # 新規銘柄を優先、残り枠を継続銘柄で埋める（合計90銘柄上限）
+                # 新規銘柄を優先、継続銘柄は最大30銘柄まで（毎日同じ銘柄を減らす）
                 MAX_TOTAL = 90
+                MAX_CONT = 30  # 継続銘柄の上限（毎日同じ銘柄を抑制）
                 if len(new_stocks) >= MAX_TOTAL:
                     week52_pullback_sampled = new_stocks[:MAX_TOTAL]
                 else:
-                    remaining = MAX_TOTAL - len(new_stocks)
                     import random
                     random.shuffle(cont_stocks)
-                    week52_pullback_sampled = new_stocks + cont_stocks[:remaining]
+                    cont_limit = min(len(cont_stocks), MAX_CONT)
+                    week52_pullback_sampled = new_stocks + cont_stocks[:cont_limit]
                 
                 logger.info(f"📊 最終保存: {len(week52_pullback_sampled)}銘柄（新規優先）")
         except Exception as e:
