@@ -652,10 +652,10 @@ class StockScreener:
         「機関投資家・大口が安値で買い支えた」ことを示す強力な買いシグナル。
 
         条件:
-          1. 下髭比率 >= 40%（ローソク全体の4割以上が下髭）
-          2. 下髭 >= 実体 × 1.5倍（実体より大きな下髭）
-          3. 陽線（終値 >= 始値）← 買い戻し確定
-          4. 出来高 >= 20日平均出来高（大口参加の確認）
+          1. 下髭比率 >= 45%（ローソク全体の45%以上が下髭）
+          2. 下髭 >= 実体 × 1.0倍（下髭が実体以上）
+          3. 終値が当日レンジの上位30%以内（高値圏で引けている）
+          4. 陽線 または 下髭比率60%以上の強い陰線
         """
         code = stock["Code"]
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
@@ -667,6 +667,7 @@ class StockScreener:
                 "has_data": 0,
                 "passed_shadow_ratio": 0,
                 "passed_shadow_body": 0,
+                "passed_close_position": 0,
                 "passed_bullish": 0,
                 "final_detected": 0
             }
@@ -722,33 +723,32 @@ class StockScreener:
 
             lower_shadow_ratio = lower_shadow / total_range * 100   # 下髭比率(%)
             shadow_to_body = lower_shadow / body if body > 0 else 999.9  # 下髭÷実体
-            is_bullish = close_p >= open_p  # 陽線かどうか
+            close_position = (close_p - low_p) / total_range  # 終値の当日レンジ内位置(0=安値,1=高値)
 
-            # 条件1: 下髭比率 >= 35%（緩和: 40%→35%）
-            if lower_shadow_ratio < 35.0:
+            # 条件1: 下髭比率 >= 45%
+            if lower_shadow_ratio < 45.0:
                 return None
             self.perfect_order_stats["passed_shadow_ratio"] += 1
 
-            # 条件2: 下髭 >= 実体 × 1.0倍（緩和: 1.5倍→1.0倍）
-            # 十字線（実体ゼロ）は条件スキップ
+            # 条件2: 下髭 >= 実体 × 1.0倍（十字線は条件スキップ）
             if body > 0 and shadow_to_body < 1.0:
                 return None
             self.perfect_order_stats["passed_shadow_body"] += 1
 
-            # 条件3: 陽線 または 下髭比率 >= 60%（強い下髭なら陰線も通過）
+            # 条件3: 終値が当日レンジの上位30%以内（高値圏で引けている）
+            if close_position < 0.7:
+                return None
+            self.perfect_order_stats["passed_close_position"] += 1
+
+            # 条件4: 陽線 または 下髭比率 >= 60%（強い下髭なら陰線も通過）
             if close_p < open_p and lower_shadow_ratio < 60.0:
                 return None
             self.perfect_order_stats["passed_bullish"] += 1
 
-            # 条件4: 出来高 >= 20日平均の50%以上（緩和: 100%→50%）
-            vol_20avg = float(df['Volume'].iloc[-21:-1].mean())
-            if vol_20avg > 0 and volume < vol_20avg * 0.5:
-                return None
-
             self.perfect_order_stats["final_detected"] += 1
 
             logger.debug(f"[{code}] ✅ ハンマー: 下髭比率={lower_shadow_ratio:.1f}% "
-                        f"下髭÷実体={shadow_to_body:.1f}倍 close={close_p}")
+                        f"下髭÷実体={shadow_to_body:.1f}倍 終値位置={close_position*100:.1f}% close={close_p}")
 
             return {
                 "code": code,

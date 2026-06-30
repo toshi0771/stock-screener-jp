@@ -149,11 +149,11 @@ def get_latest_screening_results(screening_type, market='all'):
             if screening_type == 'breakout':
                 # ハンマー手法: pullback_pct=下髭比率, stochastic_k=下髭÷実体, stochastic_d=上髭比率
                 result.update({
-                    'pullback_pct': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
-                    'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
-                    'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None,
-                    'ema20': float(stock['ema_20']) if stock['ema_20'] else None,  # 下髭の長さ(円)
-                    'ema50': float(stock['ema_50']) if stock['ema_50'] else None,  # 実体の長さ(円)
+                    'pullback_pct': float(stock.get('pullback_percentage')) if stock.get('pullback_percentage') is not None else None,
+                    'stochastic_k': float(stock.get('stochastic_k')) if stock.get('stochastic_k') is not None else None,
+                    'stochastic_d': float(stock.get('stochastic_d')) if stock.get('stochastic_d') is not None else None,
+                    'ema20': float(stock.get('ema_20')) if stock.get('ema_20') is not None else None,  # 下髭の長さ(円)
+                    'ema50': float(stock.get('ema_50')) if stock.get('ema_50') is not None else None,  # 実体の長さ(円)
                 })
             elif screening_type == 'bollinger_band':
                 result.update({
@@ -310,12 +310,11 @@ def api_historical():
             # スクリーニング手法別の追加情報
             if method == 'breakout':
                 result.update({
-                    'ema10': float(stock['ema_10']) if stock['ema_10'] else None,
-                    'ema20': float(stock['ema_20']) if stock['ema_20'] else None,
-                    'ema50': float(stock['ema_50']) if stock['ema_50'] else None,
-                    'pullback_pct': float(stock['pullback_percentage']) if stock['pullback_percentage'] else None,
-                    'stochastic_k': float(stock['stochastic_k']) if stock['stochastic_k'] else None,
-                    'stochastic_d': float(stock['stochastic_d']) if stock['stochastic_d'] else None,
+                    'pullback_pct': float(stock.get('pullback_percentage')) if stock.get('pullback_percentage') is not None else None,
+                    'stochastic_k': float(stock.get('stochastic_k')) if stock.get('stochastic_k') is not None else None,
+                    'stochastic_d': float(stock.get('stochastic_d')) if stock.get('stochastic_d') is not None else None,
+                    'ema20': float(stock.get('ema_20')) if stock.get('ema_20') is not None else None,
+                    'ema50': float(stock.get('ema_50')) if stock.get('ema_50') is not None else None,
                 })
             elif method == 'bollinger_band':
                 result.update({
