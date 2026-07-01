@@ -80,6 +80,7 @@ async def main():
             logger.info("=" * 60)
             logger.info(f"  処理対象:             {s['total']:,}銘柄")
             logger.info(f"  データ取得成功:       {s['has_data']:,}銘柄")
+            logger.info(f"  EMA10/20/50収束通過:  {s['passed_ema_squeeze']:,}銘柄")
             logger.info(f"  下髭比率≥45%通過:    {s['passed_shadow_ratio']:,}銘柄")
             logger.info(f"  下髭÷実体≥1.0倍通過: {s['passed_shadow_body']:,}銘柄")
             logger.info(f"  終値位置上位30%通過:  {s['passed_close_position']:,}銘柄")

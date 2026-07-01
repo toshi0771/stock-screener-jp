@@ -648,10 +648,12 @@ class StockScreener:
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """ハンマー（下髭）型スクリーニング
 
-        当日のローソク足で大きな下髭を検出。
-        「機関投資家・大口が安値で買い支えた」ことを示す強力な買いシグナル。
+        3本のEMA（10/20/50）が収束（スクイーズ）している場面で大きな下髭を検出。
+        「もみ合いで方向感が乏しい中、機関投資家・大口が安値で買い支えた」ことを
+        示す強力な買いシグナル。
 
         条件:
+          0. EMA10/20/50が収束（3本の乖離幅が終値の3.0%以内）
           1. 下髭比率 >= 45%（ローソク全体の45%以上が下髭）
           2. 下髭 >= 実体 × 1.0倍（下髭が実体以上）
           3. 終値が当日レンジの上位30%以内（高値圏で引けている）
@@ -661,10 +663,16 @@ class StockScreener:
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         market = stock.get("Mkt", stock.get("MarketCode", ""))
 
+        # EMA50が意味のある値になるために必要な最小データ数
+        MIN_BARS_FOR_EMA = 60
+        # 3本のEMAが「収束している」とみなす乖離幅の閾値（終値に対する%）
+        EMA_SQUEEZE_THRESHOLD_PCT = 3.0
+
         if not hasattr(self, 'perfect_order_stats'):
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
+                "passed_ema_squeeze": 0,
                 "passed_shadow_ratio": 0,
                 "passed_shadow_body": 0,
                 "passed_close_position": 0,
@@ -676,8 +684,8 @@ class StockScreener:
 
         try:
             end_date = self.latest_trading_date
-            # 出来高20日平均のために30日分取得
-            start_str, end_str = get_date_range_for_screening(end_date, 30)
+            # EMA50計算＋出来高20日平均のために100日分取得
+            start_str, end_str = get_date_range_for_screening(end_date, 100)
 
             df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
             if df is None:
@@ -689,7 +697,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
 
-            if df is None or len(df) < 21:
+            if df is None or len(df) < MIN_BARS_FOR_EMA:
                 return None
 
             # キャッシュの鮮度チェック
@@ -702,12 +710,29 @@ class StockScreener:
 
             self.perfect_order_stats["has_data"] += 1
 
+            # EMA10/20/50を計算
+            df['EMA10'] = self.calculate_ema(df['Close'], 10)
+            df['EMA20'] = self.calculate_ema(df['Close'], 20)
+            df['EMA50'] = self.calculate_ema(df['Close'], 50)
+
             latest = df.iloc[-1]
             open_p   = float(latest['Open'])
             high_p   = float(latest['High'])
             low_p    = float(latest['Low'])
             close_p  = float(latest['Close'])
             volume   = float(latest.get('Volume', 0))
+            ema10    = float(latest['EMA10'])
+            ema20    = float(latest['EMA20'])
+            ema50    = float(latest['EMA50'])
+
+            if close_p <= 0:
+                return None
+
+            # 条件0: EMA10/20/50が収束（もみ合い＝スクイーズ状態）しているか
+            ema_spread_pct = (max(ema10, ema20, ema50) - min(ema10, ema20, ema50)) / close_p * 100
+            if ema_spread_pct > EMA_SQUEEZE_THRESHOLD_PCT:
+                return None
+            self.perfect_order_stats["passed_ema_squeeze"] += 1
 
             # ローソク各部の長さを計算
             total_range   = high_p - low_p
@@ -747,7 +772,8 @@ class StockScreener:
 
             self.perfect_order_stats["final_detected"] += 1
 
-            logger.debug(f"[{code}] ✅ ハンマー: 下髭比率={lower_shadow_ratio:.1f}% "
+            logger.debug(f"[{code}] ✅ ハンマー: EMA乖離={ema_spread_pct:.2f}% "
+                        f"下髭比率={lower_shadow_ratio:.1f}% "
                         f"下髭÷実体={shadow_to_body:.1f}倍 終値位置={close_position*100:.1f}% close={close_p}")
 
             return {
