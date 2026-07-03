@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""ブレイクアウト（持ち合い上放れ）スクリーニング専用スクリプト"""
+"""ハンマー（下髭）スクリーニング専用スクリプト"""
 
 import asyncio
 import sys
@@ -14,7 +14,7 @@ from daily_data_collection import (
 )
 
 async def main():
-    """ブレイクアウトのみを実行"""
+    """ハンマーのみを実行"""
     screener = StockScreener()
     
     try:
@@ -59,18 +59,18 @@ async def main():
         screener.latest_trading_date = await screener.get_latest_trading_date()
         logger.info(f"📅 最新取引日（スクリーニング用）: {screener.latest_trading_date}")
         
-        # ブレイクアウトスクリーニングのみ実行
+        # ハンマースクリーニングのみ実行
         logger.info("=" * 80)
-        logger.info("🎯 ブレイクアウト（持ち合い上放れ）スクリーニング開始")
+        logger.info("🎯 ハンマー（下髭）スクリーニング開始")
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
         logger.info("=" * 80)
         
         bo_start = datetime.now()
         breakout = await screener.process_stocks_batch(
-            stocks, screener.screen_stock_breakout, "ブレイクアウト"
+            stocks, screener.screen_stock_breakout, "ハンマー"
         )
         bo_time = int((datetime.now() - bo_start).total_seconds() * 1000)
-        logger.info(f"✅ ブレイクアウト検出: {len(breakout)}銘柄 ({bo_time}ms)")
+        logger.info(f"✅ ハンマー検出: {len(breakout)}銘柄 ({bo_time}ms)")
 
         # 詳細統計を出力
         if hasattr(screener, 'perfect_order_stats'):
@@ -80,7 +80,8 @@ async def main():
             logger.info("=" * 60)
             logger.info(f"  処理対象:             {s['total']:,}銘柄")
             logger.info(f"  データ取得成功:       {s['has_data']:,}銘柄")
-            logger.info(f"  EMA10/20/50収束通過:  {s['passed_ema_squeeze']:,}銘柄")
+            logger.info(f"  52週高値-20%以下通過: {s['passed_bottom_zone']:,}銘柄")
+            logger.info(f"  ストキャス%K≤20通過: {s['passed_stochastic']:,}銘柄")
             logger.info(f"  下髭比率≥45%通過:    {s['passed_shadow_ratio']:,}銘柄")
             logger.info(f"  下髭÷実体≥1.0倍通過: {s['passed_shadow_body']:,}銘柄")
             logger.info(f"  終値位置上位30%通過:  {s['passed_close_position']:,}銘柄")
@@ -167,7 +168,7 @@ async def main():
         logger.info(f"  ヒット率: {persistent_stats['hit_rate']}%")
         logger.info("=" * 80)
         
-        logger.info("✅ ブレイクアウトスクリーニング完了")
+        logger.info("✅ ハンマースクリーニング完了")
         logger.info("=" * 80)
         
     except Exception as e:

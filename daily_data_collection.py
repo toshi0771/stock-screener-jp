@@ -648,12 +648,13 @@ class StockScreener:
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """ハンマー（下髭）型スクリーニング
 
-        3本のEMA（10/20/50）が収束（スクイーズ）している場面で大きな下髭を検出。
-        「もみ合いで方向感が乏しい中、機関投資家・大口が安値で買い支えた」ことを
-        示す強力な買いシグナル。
+        「底値圏」で大きく売り込まれた後の下髭を検出。高値圏でのもみ合い
+        ブレイク前の下髭を除外し、「大きく売られた後、機関投資家・大口が
+        安値で買い支えた」反発シグナルに絞り込む。
 
         条件:
-          0. EMA10/20/50が収束（3本の乖離幅が終値の3.0%以内）
+          0a. 52週高値から20%以上下落（底値圏に限定）
+          0b. ストキャスティクス%K <= 20（売られすぎ）
           1. 下髭比率 >= 45%（ローソク全体の45%以上が下髭）
           2. 下髭 >= 実体 × 1.0倍（下髭が実体以上）
           3. 終値が当日レンジの上位30%以内（高値圏で引けている）
@@ -663,16 +664,19 @@ class StockScreener:
         name = stock.get("CoName", stock.get("CompanyName", f"銘柄{code}"))
         market = stock.get("Mkt", stock.get("MarketCode", ""))
 
-        # EMA50が意味のある値になるために必要な最小データ数
-        MIN_BARS_FOR_EMA = 60
-        # 3本のEMAが「収束している」とみなす乖離幅の閾値（終値に対する%）
-        EMA_SQUEEZE_THRESHOLD_PCT = 3.0
+        # 52週高値判定のために必要な最小データ数
+        MIN_BARS_FOR_YEAR_HIGH = 100
+        # 「底値圏」とみなす52週高値からの下落率(%)
+        BOTTOM_ZONE_DROP_PCT = 20.0
+        # ストキャスティクス「売られすぎ」の閾値(%K)
+        STOCHASTIC_OVERSOLD_MAX = 20.0
 
         if not hasattr(self, 'perfect_order_stats'):
             self.perfect_order_stats = {
                 "total": 0,
                 "has_data": 0,
-                "passed_ema_squeeze": 0,
+                "passed_bottom_zone": 0,
+                "passed_stochastic": 0,
                 "passed_shadow_ratio": 0,
                 "passed_shadow_body": 0,
                 "passed_close_position": 0,
@@ -684,8 +688,8 @@ class StockScreener:
 
         try:
             end_date = self.latest_trading_date
-            # EMA50計算＋出来高20日平均のために100日分取得
-            start_str, end_str = get_date_range_for_screening(end_date, 100)
+            # 52週高値判定＋出来高20日平均のために370日分取得
+            start_str, end_str = get_date_range_for_screening(end_date, 370)
 
             df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
             if df is None:
@@ -697,7 +701,7 @@ class StockScreener:
                 if df is not None:
                     await self.persistent_cache.set(code, start_str, end_str, df)
 
-            if df is None or len(df) < MIN_BARS_FOR_EMA:
+            if df is None or len(df) < MIN_BARS_FOR_YEAR_HIGH:
                 return None
 
             # キャッシュの鮮度チェック
@@ -710,29 +714,28 @@ class StockScreener:
 
             self.perfect_order_stats["has_data"] += 1
 
-            # EMA10/20/50を計算
-            df['EMA10'] = self.calculate_ema(df['Close'], 10)
-            df['EMA20'] = self.calculate_ema(df['Close'], 20)
-            df['EMA50'] = self.calculate_ema(df['Close'], 50)
-
             latest = df.iloc[-1]
             open_p   = float(latest['Open'])
             high_p   = float(latest['High'])
             low_p    = float(latest['Low'])
             close_p  = float(latest['Close'])
             volume   = float(latest.get('Volume', 0))
-            ema10    = float(latest['EMA10'])
-            ema20    = float(latest['EMA20'])
-            ema50    = float(latest['EMA50'])
 
             if close_p <= 0:
                 return None
 
-            # 条件0: EMA10/20/50が収束（もみ合い＝スクイーズ状態）しているか
-            ema_spread_pct = (max(ema10, ema20, ema50) - min(ema10, ema20, ema50)) / close_p * 100
-            if ema_spread_pct > EMA_SQUEEZE_THRESHOLD_PCT:
+            # 条件0a: 52週高値から20%以上下落しているか（底値圏に限定）
+            year_high = float(df['High'].max())
+            drop_from_high_pct = (year_high - close_p) / year_high * 100 if year_high > 0 else 0
+            if drop_from_high_pct < BOTTOM_ZONE_DROP_PCT:
                 return None
-            self.perfect_order_stats["passed_ema_squeeze"] += 1
+            self.perfect_order_stats["passed_bottom_zone"] += 1
+
+            # 条件0b: ストキャスティクス%Kが売られすぎ水準か
+            stoch_k, stoch_d = self.calculate_stochastic(df)
+            if stoch_k is None or stoch_k > STOCHASTIC_OVERSOLD_MAX:
+                return None
+            self.perfect_order_stats["passed_stochastic"] += 1
 
             # ローソク各部の長さを計算
             total_range   = high_p - low_p
@@ -772,7 +775,8 @@ class StockScreener:
 
             self.perfect_order_stats["final_detected"] += 1
 
-            logger.debug(f"[{code}] ✅ ハンマー: EMA乖離={ema_spread_pct:.2f}% "
+            logger.debug(f"[{code}] ✅ ハンマー: 52週高値比={-drop_from_high_pct:.1f}% "
+                        f"ストキャスK={stoch_k:.1f} "
                         f"下髭比率={lower_shadow_ratio:.1f}% "
                         f"下髭÷実体={shadow_to_body:.1f}倍 終値位置={close_position*100:.1f}% close={close_p}")
 
@@ -785,7 +789,7 @@ class StockScreener:
                 "pullback_pct": round(lower_shadow_ratio, 1),     # 下髭比率(%) ← ソート①
                 "stochastic_k": round(min(shadow_to_body, 99.9), 2),  # 下髭÷実体 ← ソート②
                 "stochastic_d": round(upper_shadow / total_range * 100, 1),  # 上髭比率(%)
-                "week52_high": round(high_p, 2),       # 当日高値
+                "week52_high": round(year_high, 2),     # 52週（約370日）高値
                 "ema20": round(lower_shadow, 2),        # 下髭の長さ（円）
                 "ema50": round(body, 2),                # 実体の長さ（円）
             }
@@ -935,15 +939,17 @@ class StockScreener:
             if df is None or len(df) < 20:  # 営業日20日分あればOK（最低限の判定可能）
                 return None
             
-            # 🔧 日付チェックを一時的に無効化（データ蓄積まで）
-            # latest = df.iloc[-1]
-            # latest_data_date = pd.to_datetime(latest['Date']).date()
-            # end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            # 
-            # # キャッシュの最新データが実行日より3日以上古い場合は除外
-            # if (end_date_obj - latest_data_date).days > 3:
-            #     logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
-            #     return None
+            # キャッシュの鮮度チェック（再有効化）
+            # データ蓄積待ちのため一時的に無効化していたが、EMAタッチ判定が
+            # 数日前の古いデータで行われ、当日は既に条件を外れている銘柄が
+            # 「本日検出」として表示される問題があったため復活。
+            # persistent_cache側の許容ギャップ（5日）に合わせる。
+            latest = df.iloc[-1]
+            latest_data_date = pd.to_datetime(latest['Date']).date()
+            end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
+            if (end_date_obj - latest_data_date).days > 5:
+                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
+                return None
             
             self.pullback_stats['has_data'] += 1
             

@@ -112,7 +112,9 @@ async def main():
         week52_pullback_sampled = sample_stocks_balanced(week52_pullback, max_per_range=10)
         logger.info(f"📊 間引き後: {len(week52_pullback_sampled)}銘柄")
         
-        # 前日との差分フィルター（新規検出銘柄を優先）
+        # 前日比較（ログ用のみ。表示対象は絞らず、当日タッチした実検出結果をそのまま使う）
+        # 継続銘柄（前日もタッチ）は当日も条件を満たしているため自然に表示され続ける。
+        # 90銘柄への水増し／切り捨ては行わない（最小限の実検出数のみ保存する）。
         try:
             yesterday = (screener.latest_trading_date - timedelta(days=3)).strftime('%Y-%m-%d')
             prev_result = screener.sb_client.client.table('screening_results')\
@@ -132,24 +134,10 @@ async def main():
                     .execute()
                 prev_codes = {str(s['stock_code']) for s in prev_stocks.data}
                 
-                # 新規銘柄と継続銘柄に分ける
-                new_stocks = [s for s in week52_pullback_sampled if str(s['code']) not in prev_codes]
-                cont_stocks = [s for s in week52_pullback_sampled if str(s['code']) in prev_codes]
+                new_count = sum(1 for s in week52_pullback_sampled if str(s['code']) not in prev_codes)
+                cont_count = len(week52_pullback_sampled) - new_count
                 
-                logger.info(f"📊 新規検出: {len(new_stocks)}銘柄 / 継続: {len(cont_stocks)}銘柄")
-                
-                # 新規銘柄を優先、継続銘柄は最大30銘柄まで（毎日同じ銘柄を減らす）
-                MAX_TOTAL = 90
-                MAX_CONT = 30  # 継続銘柄の上限（毎日同じ銘柄を抑制）
-                if len(new_stocks) >= MAX_TOTAL:
-                    week52_pullback_sampled = new_stocks[:MAX_TOTAL]
-                else:
-                    import random
-                    random.shuffle(cont_stocks)
-                    cont_limit = min(len(cont_stocks), MAX_CONT)
-                    week52_pullback_sampled = new_stocks + cont_stocks[:cont_limit]
-                
-                logger.info(f"📊 最終保存: {len(week52_pullback_sampled)}銘柄（新規優先）")
+                logger.info(f"📊 新規検出: {new_count}銘柄 / 継続: {cont_count}銘柄（表示件数への影響なし）")
         except Exception as e:
             logger.warning(f"前日比較スキップ: {e}")
         

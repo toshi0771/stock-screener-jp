@@ -713,9 +713,9 @@
                             html += `<td>${stock.volume ? stock.volume.toLocaleString() : '-'}</td>`;
                             
                             if (selectedMethod === 'breakout') {
-                                html += `<td>${stock.pullback_pct !== undefined ? stock.pullback_pct.toFixed(1) + '%' : '-'}</td>`;
-                                html += `<td>${stock.stochastic_k !== undefined ? stock.stochastic_k.toFixed(1) + '倍' : '-'}</td>`;
-                                html += `<td>${stock.stochastic_d !== undefined ? stock.stochastic_d.toFixed(1) + '%' : '-'}</td>`;
+                                html += `<td>${(stock.pullback_pct !== undefined && stock.pullback_pct !== null) ? stock.pullback_pct.toFixed(1) + '%' : '-'}</td>`;
+                                html += `<td>${(stock.stochastic_k !== undefined && stock.stochastic_k !== null) ? stock.stochastic_k.toFixed(1) + '倍' : '-'}</td>`;
+                                html += `<td>${(stock.stochastic_d !== undefined && stock.stochastic_d !== null) ? stock.stochastic_d.toFixed(1) + '%' : '-'}</td>`;
                             } else if (selectedMethod === 'bollinger_band') {
                                 html += `<td>${stock.sma20 ? stock.sma20.toFixed(2) : '-'}</td>`;
                                 html += `<td>${stock.upper_3sigma ? stock.upper_3sigma.toFixed(2) : '-'}</td>`;
