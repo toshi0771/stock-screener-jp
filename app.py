@@ -63,13 +63,12 @@ def get_latest_screening_results(screening_type, market='all'):
             screening_results = today_results
             print(f"   当日データ使用: {today_str}", file=sys.stderr)
         else:
-            # 当日データなし → 直近3日以内の最新データを使用
+            # 当日データなし → 直近3日以内の最新データを使用（0銘柄の日も正直に表示する）
             print(f"   当日データなし、直近データを検索...", file=sys.stderr)
             query = supabase.table('screening_results')\
                 .select('id, screening_date, total_stocks_found, market_filter, created_at')\
                 .eq('screening_type', screening_type)\
                 .gte('screening_date', three_days_ago)\
-                .gt('total_stocks_found', 0)\
                 .order('created_at', desc=True)\
                 .limit(10)
             screening_results = query.execute()
