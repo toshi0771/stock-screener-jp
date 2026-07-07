@@ -642,10 +642,9 @@
                     const market = document.getElementById('marketSelect').value;
                     const options = { market: market };
                     
-                    // ブレイクアウトの場合、オプションを追加
-                    if (selectedMethod === 'breakout') {
-                        options.box_width = document.getElementById('boxWidthSelect').value;
-                    }
+                    // ハンマー（旧ブレイクアウト）は追加オプションなし
+                    // ※ box_width（ボックス幅フィルター）はゴールデンクロス方式時代の名残りで、
+                    //   対応するUI要素(boxWidthSelect)は既に削除済みのため参照しない
                     
                     // ボリンジャーバンドの場合、オプションを追加
                     if (selectedMethod === 'bollinger_band') {
