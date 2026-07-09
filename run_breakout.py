@@ -82,6 +82,7 @@ async def main():
             logger.info(f"  データ取得成功:       {s['has_data']:,}銘柄")
             logger.info(f"  52週高値-20%以下通過: {s['passed_bottom_zone']:,}銘柄")
             logger.info(f"  ストキャス%K≤20通過: {s['passed_stochastic']:,}銘柄")
+            logger.info(f"  50EMA乖離5%以上通過: {s['passed_ema_deviation']:,}銘柄")
             logger.info(f"  下髭比率≥45%通過:    {s['passed_shadow_ratio']:,}銘柄")
             logger.info(f"  下髭÷実体≥1.0倍通過: {s['passed_shadow_body']:,}銘柄")
             logger.info(f"  終値位置上位30%通過:  {s['passed_close_position']:,}銘柄")

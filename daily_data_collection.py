@@ -655,6 +655,7 @@ class StockScreener:
         条件:
           0a. 52週高値から20%以上下落（底値圏に限定）
           0b. ストキャスティクス%K <= 20（売られすぎ）
+          0c. 終値が50EMAから5%以上下方乖離（EMA付近のノイズを除外）
           1. 下髭比率 >= 45%（ローソク全体の45%以上が下髭）
           2. 下髭 >= 実体 × 1.0倍（下髭が実体以上）
           3. 終値が当日レンジの上位30%以内（高値圏で引けている）
@@ -670,6 +671,8 @@ class StockScreener:
         BOTTOM_ZONE_DROP_PCT = 20.0
         # ストキャスティクス「売られすぎ」の閾値(%K)
         STOCHASTIC_OVERSOLD_MAX = 20.0
+        # 50EMAからの下方乖離の最低ライン(%)
+        EMA50_DEVIATION_MIN_PCT = 5.0
 
         if not hasattr(self, 'perfect_order_stats'):
             self.perfect_order_stats = {
@@ -677,6 +680,7 @@ class StockScreener:
                 "has_data": 0,
                 "passed_bottom_zone": 0,
                 "passed_stochastic": 0,
+                "passed_ema_deviation": 0,
                 "passed_shadow_ratio": 0,
                 "passed_shadow_body": 0,
                 "passed_close_position": 0,
@@ -714,12 +718,16 @@ class StockScreener:
 
             self.perfect_order_stats["has_data"] += 1
 
+            # 50EMAを計算（乖離判定用）
+            df['EMA50'] = self.calculate_ema(df['Close'], 50)
+
             latest = df.iloc[-1]
             open_p   = float(latest['Open'])
             high_p   = float(latest['High'])
             low_p    = float(latest['Low'])
             close_p  = float(latest['Close'])
             volume   = float(latest.get('Volume', 0))
+            ema50    = float(latest['EMA50'])
 
             if close_p <= 0:
                 return None
@@ -736,6 +744,13 @@ class StockScreener:
             if stoch_k is None or stoch_k > STOCHASTIC_OVERSOLD_MAX:
                 return None
             self.perfect_order_stats["passed_stochastic"] += 1
+
+            # 条件0c: 終値が50EMAから5%以上下方乖離しているか
+            # （EMA付近でのノイズ的な下髭を除外し、明確に売り込まれた場面に限定）
+            ema_deviation_pct = (ema50 - close_p) / ema50 * 100 if ema50 > 0 else 0
+            if ema_deviation_pct < EMA50_DEVIATION_MIN_PCT:
+                return None
+            self.perfect_order_stats["passed_ema_deviation"] += 1
 
             # ローソク各部の長さを計算
             total_range   = high_p - low_p
@@ -776,7 +791,7 @@ class StockScreener:
             self.perfect_order_stats["final_detected"] += 1
 
             logger.debug(f"[{code}] ✅ ハンマー: 52週高値比={-drop_from_high_pct:.1f}% "
-                        f"ストキャスK={stoch_k:.1f} "
+                        f"ストキャスK={stoch_k:.1f} 50EMA乖離={-ema_deviation_pct:.1f}% "
                         f"下髭比率={lower_shadow_ratio:.1f}% "
                         f"下髭÷実体={shadow_to_body:.1f}倍 終値位置={close_position*100:.1f}% close={close_p}")
 
@@ -835,10 +850,11 @@ class StockScreener:
             latest_data_date = pd.to_datetime(latest['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
             
-            # キャッシュの最新データが実行日より3日以上古い場合は除外
-            # （3σは厳しい条件のため、古いデータの使い回しを確実に防ぐ）
-            if (end_date_obj - latest_data_date).days > 3:
-                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
+            # キャッシュの最新データが実行日と完全に一致しない場合は除外（当日該当のみ表示）
+            # 以前は3日以内の許容だったが、3日前のタッチが「当日検出」として
+            # 表示されてしまうとの指摘を受け、当日データのみに厳格化。
+            if latest_data_date != end_date_obj:
+                logger.debug(f"当日データではない [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
             # ボリンジャーバンド計算
@@ -981,10 +997,10 @@ class StockScreener:
             # 新高値からの下落率
             pullback_pct = ((high_200d - current_price) / high_200d) * 100
             
-            # 条件2: 200日新高値から 2%〜30% の押し目
-            # ・2%未満 → 高値圏そのもの（押し目でない）
+            # 条件2: 200日新高値から 5%〜30% の押し目
+            # ・5%未満 → 高値圏そのもの（「まんま新高値」に見えてしまう押し目でない状態）
             # ・30%超  → 下落しすぎ（トレンド崩壊の可能性）
-            if 2 <= pullback_pct <= 30:
+            if 5 <= pullback_pct <= 30:
                 self.pullback_stats['within_30pct'] += 1
             else:
                 return None
@@ -1062,12 +1078,16 @@ class StockScreener:
                 if stoch_k is None or stoch_k > 20:  # 売られすぎ閾値
                     return None
             
-            # 条件: EMA50が20日前より上（上昇トレンド中のみ）
+            # 条件: EMA50が20日前より明確に上昇している（横ばいを除外）
+            # 以前は「わずかでも上」なら通過していたため、実質横ばいの銘柄も
+            # 「上昇トレンド」として検出されてしまっていた。3%以上の上昇を必須にする。
+            EMA50_RISING_MIN_PCT = 3.0
             if len(df) >= 20:
                 ema50_20days_ago = float(df['EMA50'].iloc[-20])
                 ema50_now = float(latest['EMA50'])
-                if ema50_now <= ema50_20days_ago:
-                    logger.debug(f"[{code}] EMA50下降中: 現在{ema50_now:.0f} <= 20日前{ema50_20days_ago:.0f}")
+                ema50_rise_pct = (ema50_now - ema50_20days_ago) / ema50_20days_ago * 100 if ema50_20days_ago > 0 else 0
+                if ema50_rise_pct < EMA50_RISING_MIN_PCT:
+                    logger.debug(f"[{code}] EMA50横ばい/下降: 20日騰落率={ema50_rise_pct:.1f}%（{EMA50_RISING_MIN_PCT}%未満）")
                     return None
             self.pullback_stats['ema50_rising'] += 1
             

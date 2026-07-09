@@ -103,10 +103,11 @@ def get_latest_screening_results(screening_type, market='all'):
             screening_result_id = screening_results.data[0]['id']
             print(f"   ⚠️ 市場フィルター不一致、最新を使用: {screening_result_id[:8]}...", file=sys.stderr)
         
-        # detected_stocksテーブルから検出銘柄を取得
+        # detected_stocksテーブルから検出銘柄を取得（コード昇順）
         detected_stocks = supabase.table('detected_stocks')\
             .select('*')\
             .eq('screening_result_id', screening_result_id)\
+            .order('stock_code')\
             .limit(10000)\
             .execute()
         
@@ -283,10 +284,11 @@ def api_historical():
         
         print(f"   検索結果: {screening_date}のデータを取得", file=sys.stderr)
         
-        # detected_stocksテーブルから検出銘柄を取得
+        # detected_stocksテーブルから検出銘柄を取得（コード昇順）
         detected_stocks = supabase.table('detected_stocks')\
             .select('*')\
             .eq('screening_result_id', screening_result_id)\
+            .order('stock_code')\
             .limit(10000)\
             .execute()
         
@@ -416,6 +418,7 @@ def get_history():
                 stocks = supabase.table('detected_stocks')\
                     .select('company_name, stock_code, market')\
                     .eq('screening_result_id', date_data['breakout_id'])\
+                    .order('stock_code')\
                     .execute()
                 
                 breakout_stocks = []
@@ -436,6 +439,7 @@ def get_history():
                     bollinger_stocks = supabase.table('detected_stocks')\
                         .select('company_name, stock_code, market, touch_direction')\
                         .eq('screening_result_id', date_data['bollinger_band_id'])\
+                        .order('stock_code')\
                         .execute()
                     # touch_directionで分類
                     plus_3sigma = []
@@ -465,6 +469,7 @@ def get_history():
                 stocks = supabase.table('detected_stocks')\
                     .select('company_name, stock_code, market, touch_ema')\
                     .eq('screening_result_id', date_data['pullback_200day_id'])\
+                    .order('stock_code')\
                     .execute()
                 
                 # touch_emaで分類
