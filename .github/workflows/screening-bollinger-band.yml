@@ -3,7 +3,7 @@ name: Bollinger Band Screening
 on:
   schedule:
     # 平日 16:00 JST (07:00 UTC) - データ取得期間が短いため最初に実行
-    - cron: '0 7 * * 1-5'
+    - cron: '7 7 * * 1-5'
   workflow_dispatch:
 
 concurrency:

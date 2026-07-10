@@ -3,7 +3,7 @@ name: Hammer Screening
 on:
   schedule:
     # 平日 20:00 JST (11:00 UTC) - レート制限対応のため間隔を確保
-    - cron: '0 11 * * 1-5'
+    - cron: '26 11 * * 1-5'
   workflow_dispatch:
 
 concurrency:
