@@ -147,11 +147,13 @@ def get_latest_screening_results(screening_type, market='all'):
             
             # スクリーニング手法別の追加情報
             if screening_type == 'breakout':
-                # ハンマー手法: pullback_pct=下髭比率, stochastic_k=下髭÷実体, stochastic_d=上髭比率
+                # ハンマー手法: pullback_pct=下髭比率, stochastic_k=下髭÷実体,
+                # stochastic_d=50EMA下方乖離(%), upper_3sigma=52週高値からの下落率(%)
                 result.update({
                     'pullback_pct': float(stock.get('pullback_percentage')) if stock.get('pullback_percentage') is not None else None,
                     'stochastic_k': float(stock.get('stochastic_k')) if stock.get('stochastic_k') is not None else None,
                     'stochastic_d': float(stock.get('stochastic_d')) if stock.get('stochastic_d') is not None else None,
+                    'drop_from_high_pct': float(stock.get('bollinger_upper')) if stock.get('bollinger_upper') is not None else None,
                     'ema20': float(stock.get('ema_20')) if stock.get('ema_20') is not None else None,  # 下髭の長さ(円)
                     'ema50': float(stock.get('ema_50')) if stock.get('ema_50') is not None else None,  # 実体の長さ(円)
                 })

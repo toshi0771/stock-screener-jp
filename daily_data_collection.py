@@ -729,19 +729,28 @@ class StockScreener:
             volume   = float(latest.get('Volume', 0))
             ema50    = float(latest['EMA50'])
 
+            # NaN/欠損データガード：Pythonの比較演算はNaNに対して常にFalseを返すため、
+            # NaNが混じった銘柄は "< 45.0" 等の条件チェックを素通りしてしまう。
+            # ここで明示的に弾かないと、価格や下髭比率がnullのまま検出扱いになる。
+            if any(pd.isna(v) for v in [open_p, high_p, low_p, close_p, ema50]):
+                logger.debug(f"[{code}] NaN/欠損データのため除外")
+                return None
+
             if close_p <= 0:
                 return None
 
             # 条件0a: 52週高値から20%以上下落しているか（底値圏に限定）
             year_high = float(df['High'].max())
-            drop_from_high_pct = (year_high - close_p) / year_high * 100 if year_high > 0 else 0
+            if pd.isna(year_high) or year_high <= 0:
+                return None
+            drop_from_high_pct = (year_high - close_p) / year_high * 100
             if drop_from_high_pct < BOTTOM_ZONE_DROP_PCT:
                 return None
             self.perfect_order_stats["passed_bottom_zone"] += 1
 
             # 条件0b: ストキャスティクス%Kが売られすぎ水準か
             stoch_k, stoch_d = self.calculate_stochastic(df)
-            if stoch_k is None or stoch_k > STOCHASTIC_OVERSOLD_MAX:
+            if stoch_k is None or pd.isna(stoch_k) or stoch_k > STOCHASTIC_OVERSOLD_MAX:
                 return None
             self.perfect_order_stats["passed_stochastic"] += 1
 
@@ -803,7 +812,8 @@ class StockScreener:
                 "volume": int(volume),
                 "pullback_pct": round(lower_shadow_ratio, 1),     # 下髭比率(%) ← ソート①
                 "stochastic_k": round(min(shadow_to_body, 99.9), 2),  # 下髭÷実体 ← ソート②
-                "stochastic_d": round(upper_shadow / total_range * 100, 1),  # 上髭比率(%)
+                "stochastic_d": round(ema_deviation_pct, 1),      # 50EMA下方乖離(%) ※旧: 上髭比率
+                "upper_3sigma": round(drop_from_high_pct, 1),     # 52週高値からの下落率(%) ※旧: 未使用列を流用
                 "week52_high": round(year_high, 2),     # 52週（約370日）高値
                 "ema20": round(lower_shadow, 2),        # 下髭の長さ（円）
                 "ema50": round(body, 2),                # 実体の長さ（円）
