@@ -1,0 +1,55 @@
+name: Hammer Screening
+
+on:
+  schedule:
+    # 平日 20:00 JST (11:00 UTC) - レート制限対応のため間隔を確保
+    - cron: '26 11 * * 1-5'
+  workflow_dispatch:
+
+concurrency:
+  group: screening-breakout
+  cancel-in-progress: false
+
+jobs:
+  screen-breakout:
+    runs-on: ubuntu-latest
+    timeout-minutes: 360  # 6時間
+    
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+    
+    - name: Restore stock price cache
+      uses: actions/cache/restore@v5
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
+        restore-keys: |
+          stock-prices-cache-${{ runner.os }}-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+    
+    - name: Run Hammer Screening
+      env:
+        JQUANTS_REFRESH_TOKEN: ${{ secrets.JQUANTS_REFRESH_TOKEN }}
+        JQUANTS_TOKEN_CREATED_DATE: ${{ secrets.JQUANTS_TOKEN_CREATED_DATE }}
+        JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
+        SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+        SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+      run: |
+        python run_breakout.py
+    
+    - name: Save stock price cache
+      uses: actions/cache/save@v5
+      if: always()
+      with:
+        path: ~/.cache/stock_prices
+        key: stock-prices-cache-${{ runner.os }}-${{ github.run_id }}
