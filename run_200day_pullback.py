@@ -108,38 +108,52 @@ async def main():
             logger.info(f"\n⭐ 全条件通過: {stats['passed_all']:,}銘柄")
             logger.info("="*60 + "\n")
         
-        # 間引き処理
-        week52_pullback_sampled = sample_stocks_balanced(week52_pullback, max_per_range=10)
-        logger.info(f"📊 間引き後: {len(week52_pullback_sampled)}銘柄")
-        
-        # 前日比較（ログ用のみ。表示対象は絞らず、当日タッチした実検出結果をそのまま使う）
-        # 継続銘柄（前日もタッチ）は当日も条件を満たしているため自然に表示され続ける。
-        # 90銘柄への水増し／切り捨ては行わない（最小限の実検出数のみ保存する）。
+        # 2日連続で表示された銘柄を除外し、他のタッチ銘柄に入れ替える
+        # （EMAタッチが続いていても、同じ銘柄ばかり表示され続けるとの指摘のため、
+        #   3日目は候補から一旦外し、まだ表示していない他の該当銘柄に譲る）
+        week52_pullback_filtered = week52_pullback
         try:
-            yesterday = (screener.latest_trading_date - timedelta(days=3)).strftime('%Y-%m-%d')
-            prev_result = screener.sb_client.client.table('screening_results')\
-                .select('id')\
+            two_days_ago = (screener.latest_trading_date - timedelta(days=5)).strftime('%Y-%m-%d')
+            prev_results = screener.sb_client.client.table('screening_results')\
+                .select('id, screening_date')\
                 .eq('screening_type', '200day_pullback')\
-                .gte('screening_date', yesterday)\
+                .gte('screening_date', two_days_ago)\
                 .lt('screening_date', target_date)\
-                .order('created_at', desc=True)\
-                .limit(1)\
+                .order('screening_date', desc=True)\
+                .limit(2)\
                 .execute()
             
-            if prev_result.data:
-                prev_id = prev_result.data[0]['id']
-                prev_stocks = screener.sb_client.client.table('detected_stocks')\
-                    .select('stock_code')\
-                    .eq('screening_result_id', prev_id)\
-                    .execute()
-                prev_codes = {str(s['stock_code']) for s in prev_stocks.data}
+            if len(prev_results.data) >= 2:
+                day1_id = prev_results.data[0]['id']  # 前日
+                day2_id = prev_results.data[1]['id']  # 前々日
                 
-                new_count = sum(1 for s in week52_pullback_sampled if str(s['code']) not in prev_codes)
-                cont_count = len(week52_pullback_sampled) - new_count
+                day1_stocks = screener.sb_client.client.table('detected_stocks')\
+                    .select('stock_code').eq('screening_result_id', day1_id).execute()
+                day2_stocks = screener.sb_client.client.table('detected_stocks')\
+                    .select('stock_code').eq('screening_result_id', day2_id).execute()
                 
-                logger.info(f"📊 新規検出: {new_count}銘柄 / 継続: {cont_count}銘柄（表示件数への影響なし）")
+                day1_codes = {str(s['stock_code']) for s in day1_stocks.data}
+                day2_codes = {str(s['stock_code']) for s in day2_stocks.data}
+                repeat_codes = day1_codes & day2_codes  # 2日連続で表示された銘柄
+                
+                if repeat_codes:
+                    before_count = len(week52_pullback_filtered)
+                    week52_pullback_filtered = [
+                        s for s in week52_pullback_filtered
+                        if str(s['code']) not in repeat_codes
+                    ]
+                    excluded = before_count - len(week52_pullback_filtered)
+                    logger.info(f"📊 2日連続表示のため除外: {excluded}銘柄 / 残り: {len(week52_pullback_filtered)}銘柄")
+                else:
+                    logger.info("📊 2日連続表示の銘柄なし（除外対象なし）")
+            else:
+                logger.info("📊 過去2日分のデータが揃っていないため、除外処理をスキップ")
         except Exception as e:
-            logger.warning(f"前日比較スキップ: {e}")
+            logger.warning(f"2日連続除外処理スキップ: {e}")
+        
+        # 間引き処理（除外後の候補プールから抽選するため、自然に別の銘柄が入りやすくなる）
+        week52_pullback_sampled = sample_stocks_balanced(week52_pullback_filtered, max_per_range=10)
+        logger.info(f"📊 間引き後: {len(week52_pullback_sampled)}銘柄")
         
         # 銘柄コード昇順でソート（表示順を一定にする）
         week52_pullback_sampled = sorted(
@@ -151,7 +165,7 @@ async def main():
         # Supabase保存
         screening_id = screener.sb_client.save_screening_result(
             "200day_pullback", target_date,
-            len(week52_pullback), pb_time
+            len(week52_pullback_filtered), pb_time
         )
         if screening_id:
             screener.sb_client.save_detected_stocks(screening_id, week52_pullback_sampled)

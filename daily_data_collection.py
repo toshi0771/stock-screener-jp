@@ -970,11 +970,14 @@ class StockScreener:
             # 数日前の古いデータで行われ、当日は既に条件を外れている銘柄が
             # 「本日検出」として表示される問題があったため復活。
             # persistent_cache側の許容ギャップ（5日）に合わせる。
+            # キャッシュの最新データが実行日と完全に一致しない場合は除外（当日タッチのみ表示）
+            # 以前は5日以内の許容だったため、4日前のEMAタッチが「本日検出」として
+            # 表示されてしまっていた。ボリンジャーと同様に当日データのみに厳格化。
             latest = df.iloc[-1]
             latest_data_date = pd.to_datetime(latest['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            if (end_date_obj - latest_data_date).days > 5:
-                logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
+            if latest_data_date != end_date_obj:
+                logger.debug(f"当日データではない [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
             self.pullback_stats['has_data'] += 1
