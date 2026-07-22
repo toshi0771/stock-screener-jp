@@ -708,11 +708,12 @@ class StockScreener:
             if df is None or len(df) < MIN_BARS_FOR_YEAR_HIGH:
                 return None
 
-            # キャッシュの鮮度チェック
+            # キャッシュの鮮度チェック（1日以内の許容 = J-Quantsの配信遅延を吸収しつつ、
+            # 多日ズレたデータが「本日の結果」として誤表示されるのを防ぐ）
             latest_check = df.iloc[-1]
             latest_data_date = pd.to_datetime(latest_check['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            if (end_date_obj - latest_data_date).days > 3:
+            if (end_date_obj - latest_data_date).days > 1:
                 logger.debug(f"キャッシュデータが古すぎる [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
 
@@ -860,10 +861,12 @@ class StockScreener:
             latest_data_date = pd.to_datetime(latest['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
             
-            # キャッシュの最新データが実行日と完全に一致しない場合は除外（当日該当のみ表示）
-            # 以前は3日以内の許容だったが、3日前のタッチが「当日検出」として
-            # 表示されてしまうとの指摘を受け、当日データのみに厳格化。
-            if latest_data_date != end_date_obj:
+            # キャッシュの最新データが実行日から1日を超えて古い場合は除外
+            # 以前は「完全一致（0日）」だったが、J-Quantsのデータ配信が
+            # 予定時刻より遅れた日に全銘柄が弾かれ0件になる事故が発生したため、
+            # 1日分だけ許容するよう緩和（3日許容だと古いデータが紛れ込むため、
+            # その中間を取る）。
+            if (end_date_obj - latest_data_date).days > 1:
                 logger.debug(f"当日データではない [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
@@ -965,18 +968,15 @@ class StockScreener:
             if df is None or len(df) < 20:  # 営業日20日分あればOK（最低限の判定可能）
                 return None
             
-            # キャッシュの鮮度チェック（再有効化）
-            # データ蓄積待ちのため一時的に無効化していたが、EMAタッチ判定が
-            # 数日前の古いデータで行われ、当日は既に条件を外れている銘柄が
-            # 「本日検出」として表示される問題があったため復活。
-            # persistent_cache側の許容ギャップ（5日）に合わせる。
-            # キャッシュの最新データが実行日と完全に一致しない場合は除外（当日タッチのみ表示）
-            # 以前は5日以内の許容だったため、4日前のEMAタッチが「本日検出」として
-            # 表示されてしまっていた。ボリンジャーと同様に当日データのみに厳格化。
+            # キャッシュの鮮度チェック（1日以内の許容）
+            # 完全一致（0日）にしていたところ、J-Quantsのデータ配信が
+            # 予定時刻より遅れた日に全銘柄が弾かれ0件になる事故が発生したため、
+            # 1日分だけ許容するよう緩和（5日許容だと古いデータが紛れ込むため、
+            # その中間を取る）。
             latest = df.iloc[-1]
             latest_data_date = pd.to_datetime(latest['Date']).date()
             end_date_obj = datetime.strptime(end_str, '%Y%m%d').date()
-            if latest_data_date != end_date_obj:
+            if (end_date_obj - latest_data_date).days > 1:
                 logger.debug(f"当日データではない [{code}]: 最新={latest_data_date}, 実行日={end_date_obj}")
                 return None
             
