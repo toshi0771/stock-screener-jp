@@ -176,11 +176,17 @@ class PersistentPriceCache:
                 start_dt = pd.to_datetime(start_date, format='%Y%m%d')
                 end_dt = pd.to_datetime(end_date, format='%Y%m%d')
                 
-                # ★重要: キャッシュの最新日がend_dtより5日以上古い場合は無効
-                # 例: 5/26障害でキャッシュ更新されず → 5/25のデータが5/29の判定に使われる問題を防ぐ
+                # ★重要: キャッシュの最新日がend_dtと同日でない場合は無効
+                # 1日許容にしていた際、「キャッシュは1日古くてもヒット」かつ
+                # 「スクリーニング側も1日古くてOK」の両方が常に満たされてしまい、
+                # 実質“真の当日データ”に一度も更新されないまま毎日1日遅れの
+                # データを使い続けるという事故が起きたため、同日一致のみ許可に変更。
+                # これによりキャッシュは「同日内の使い回し」専用となり、日が変われば
+                # 必ず一度はAPIへ再取得を試みる（実際に古い場合はスクリーニング側の
+                # 1日許容チェックが吸収する）。
                 cache_latest_date = df['Date'].max()
                 date_gap = (end_dt - cache_latest_date).days
-                if date_gap > 5:
+                if date_gap > 0:
                     logger.debug(f"キャッシュデータが古い: {stock_code} "
                                 f"(要求終了日: {end_dt.date()}, "
                                 f"キャッシュ最新日: {cache_latest_date.date()}, "
