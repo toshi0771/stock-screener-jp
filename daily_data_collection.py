@@ -695,15 +695,11 @@ class StockScreener:
             # 52週高値判定＋出来高20日平均のために370日分取得
             start_str, end_str = get_date_range_for_screening(end_date, 370)
 
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
-            if df is None:
-                df = await self.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    self.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                if df is not None:
-                    await self.persistent_cache.set(code, start_str, end_str, df)
+            df = await self.persistent_cache.get_or_fetch_incremental(
+                code, start_str, end_str,
+                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                max_age_days=60
+            )
 
             if df is None or len(df) < MIN_BARS_FOR_YEAR_HIGH:
                 return None
@@ -840,19 +836,12 @@ class StockScreener:
             # 日付範囲を取得（50日分、20SMAのみ必要）
             start_str, end_str = get_date_range_for_screening(end_date, 50)
             
-            # 永続キャッシュから取得を試みる（50日分のデータが必要）
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=60)
-            
-            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
-            if df is None:
-                df = await self.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    self.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                # 取得したデータを永続キャッシュに保存
-                if df is not None:
-                    await self.persistent_cache.set(code, start_str, end_str, df)
+            # 永続キャッシュから取得を試みる（不足分のみ差分取得）
+            df = await self.persistent_cache.get_or_fetch_incremental(
+                code, start_str, end_str,
+                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                max_age_days=60
+            )
             
             if df is None or len(df) < 20:
                 return None
@@ -951,19 +940,12 @@ class StockScreener:
             # 日付範囲を取得（200日分、キャッシュ範囲内に収める）
             start_str, end_str = get_date_range_for_screening(end_date, 200)
             
-            # 永続キャッシュから取得を試みる（200日分のデータが必要）
-            df = await self.persistent_cache.get(code, start_str, end_str, max_age_days=220)
-            
-            # 永続キャッシュになければメモリキャッシュ経由でAPIから取得
-            if df is None:
-                df = await self.cache.get_or_fetch(
-                    code, start_str, end_str,
-                    self.jq_client.get_prices_daily_quotes,
-                    session, code, start_str, end_str
-                )
-                # 取得したデータを永続キャッシュに保存
-                if df is not None:
-                    await self.persistent_cache.set(code, start_str, end_str, df)
+            # 永続キャッシュから取得を試みる（不足分のみ差分取得）
+            df = await self.persistent_cache.get_or_fetch_incremental(
+                code, start_str, end_str,
+                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                max_age_days=220
+            )
             
             if df is None or len(df) < 20:  # 営業日20日分あればOK（最低限の判定可能）
                 return None

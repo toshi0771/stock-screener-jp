@@ -115,6 +115,102 @@ class PersistentPriceCache:
             logger.warning(f"キャッシュ保存エラー [{cache_path.name}]: {e}")
             return False
     
+    async def get_or_fetch_incremental(
+        self,
+        stock_code: str,
+        start_date: str,
+        end_date: str,
+        fetch_func,
+        max_age_days: int = 30
+    ) -> Optional[pd.DataFrame]:
+        """
+        キャッシュを確認し、不足分だけAPIから取得して差分マージする。
+
+        これまでは「キャッシュが要求日と完全一致しなければ丸ごと再取得」
+        だったため、370日分など広い期間を毎回取得し直しており、
+        実行時間が4時間を超える原因になっていた。
+        キャッシュの末尾から不足している日数分だけを取得するよう変更する。
+
+        Args:
+            stock_code: 銘柄コード
+            start_date: 開始日（YYYYMMDD）
+            end_date: 終了日（YYYYMMDD）
+            fetch_func: async def fetch_func(from_date: str, to_date: str) -> Optional[pd.DataFrame]
+                        （session・codeは呼び出し側でクロージャに束縛して渡す）
+            max_age_days: これより古いキャッシュは差分更新せず全期間再取得する
+
+        Returns:
+            要求期間のDataFrame、取得できなければNone
+        """
+        cache_path = self._get_cache_path(stock_code)
+        result = self._load_cache_data(cache_path)
+
+        start_dt = pd.to_datetime(start_date, format='%Y%m%d')
+        end_dt = pd.to_datetime(end_date, format='%Y%m%d')
+
+        if result is None:
+            # キャッシュなし → 全期間を取得するしかない
+            self.misses += 1
+            df = await fetch_func(start_date, end_date)
+            if df is not None and not df.empty:
+                await self.set(stock_code, start_date, end_date, df)
+            return df
+
+        existing_df, last_date = result
+
+        # あまりに古いキャッシュ（差分更新の意味が薄い）は全期間再取得
+        try:
+            last_update = datetime.strptime(last_date, '%Y%m%d')
+            age = datetime.now() - last_update
+            if age.days > max_age_days:
+                logger.debug(f"キャッシュ期限切れ（差分更新せず全期間再取得）: {stock_code} ({age.days}日前)")
+                self.misses += 1
+                df = await fetch_func(start_date, end_date)
+                if df is not None and not df.empty:
+                    await self.set(stock_code, start_date, end_date, df)
+                return df
+        except Exception as e:
+            logger.warning(f"日付解析エラー [{stock_code}]: {e}")
+
+        existing_df = existing_df.copy()
+        existing_df['Date'] = pd.to_datetime(existing_df['Date'])
+        cache_latest_date = existing_df['Date'].max()
+
+        if cache_latest_date >= end_dt:
+            # 既に十分新しい → API呼び出し不要
+            self.hits += 1
+            filtered = existing_df[(existing_df['Date'] >= start_dt) & (existing_df['Date'] <= end_dt)].copy()
+            return filtered if len(filtered) > 0 else None
+
+        # 差分取得: キャッシュ最新日の翌日 ～ end_date のみ問い合わせる
+        delta_start_dt = cache_latest_date + timedelta(days=1)
+        delta_start_str = delta_start_dt.strftime('%Y%m%d')
+
+        logger.debug(f"差分取得 [{stock_code}]: {delta_start_str}~{end_date} "
+                    f"（既存データは{cache_latest_date.date()}まで保有）")
+
+        try:
+            delta_df = await fetch_func(delta_start_str, end_date)
+        except Exception as e:
+            logger.warning(f"差分取得エラー [{stock_code}]: {e}")
+            delta_df = None
+
+        if delta_df is not None and not delta_df.empty:
+            await self.set(stock_code, delta_start_str, end_date, delta_df)
+            merged_result = self._load_cache_data(cache_path)
+            if merged_result is not None:
+                merged_df, _ = merged_result
+                merged_df = merged_df.copy()
+                merged_df['Date'] = pd.to_datetime(merged_df['Date'])
+                self.hits += 1
+                filtered = merged_df[(merged_df['Date'] >= start_dt) & (merged_df['Date'] <= end_dt)].copy()
+                return filtered if len(filtered) > 0 else None
+
+        # 差分取得が空（まだ新しい取引日のデータが無い等）→ 既存キャッシュの範囲で返す
+        self.misses += 1
+        filtered = existing_df[(existing_df['Date'] >= start_dt) & (existing_df['Date'] <= end_dt)].copy()
+        return filtered if len(filtered) > 0 else None
+
     async def get(
         self,
         stock_code: str,
