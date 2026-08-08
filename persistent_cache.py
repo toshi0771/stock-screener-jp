@@ -175,6 +175,24 @@ class PersistentPriceCache:
         existing_df = existing_df.copy()
         existing_df['Date'] = pd.to_datetime(existing_df['Date'])
         cache_latest_date = existing_df['Date'].max()
+        cache_earliest_date = existing_df['Date'].min()
+
+        # キャッシュの先頭が要求開始日をカバーしていない場合（例: 50日分しか
+        # 溜まっていないキャッシュに対して200日分を要求した場合）は、差分では
+        # 補えないため全期間を再取得する。末尾の新しさだけを見て「ヒット」と
+        # 誤判定し、実際には足りないデータを返してしまうバグを防ぐ。
+        if cache_earliest_date > start_dt:
+            logger.debug(f"キャッシュの過去データ不足 [{stock_code}]: "
+                        f"キャッシュ開始={cache_earliest_date.date()}, 要求開始={start_dt.date()} "
+                        f"→ 全期間再取得")
+            self.misses += 1
+            df = await fetch_func(start_date, end_date)
+            if df is not None and not df.empty:
+                await self.set(stock_code, start_date, end_date, df)
+                return df
+            # 再取得に失敗した場合は、少なくとも既存キャッシュの範囲で返す
+            filtered = existing_df[(existing_df['Date'] >= start_dt) & (existing_df['Date'] <= end_dt)].copy()
+            return filtered if len(filtered) > 0 else None
 
         if cache_latest_date >= end_dt:
             # 既に十分新しい → API呼び出し不要
