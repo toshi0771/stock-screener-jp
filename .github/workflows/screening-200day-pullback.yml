@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: screening-200day-pullback
+  group: jquants-api-access
   cancel-in-progress: false
 
 jobs:

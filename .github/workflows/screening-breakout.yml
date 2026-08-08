@@ -7,7 +7,7 @@ on:
   workflow_dispatch:
 
 concurrency:
-  group: screening-breakout
+  group: jquants-api-access
   cancel-in-progress: false
 
 jobs:
