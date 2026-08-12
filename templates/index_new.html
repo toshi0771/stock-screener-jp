@@ -677,9 +677,19 @@
                         '200day_pullback': '200日新高値押し目'
                     };
                     
-                    // JST取引日を取得（16:00前は前日、16:00以降は当日）
-                    const tradingDate = getJSTTradingDate();
-                    const dateStr = `${tradingDate.getUTCFullYear()}年${tradingDate.getUTCMonth() + 1}月${tradingDate.getUTCDate()}日`;
+                    // 表示するデータの実際の日付をAPIレスポンスから取得
+                    // （以前はクライアント側で「現在のJST取引日」を独自計算していたため、
+                    //  祝日等でフォールバック表示になった際に「今日」の日付が誤表示される
+                    //  バグがあった。実際にサーバーが返したデータの日付を使うよう修正）
+                    let dateStr;
+                    if (data.date) {
+                        const [y, m, d] = data.date.split('-');
+                        dateStr = `${y}年${parseInt(m, 10)}月${parseInt(d, 10)}日`;
+                    } else {
+                        // データが1件も見つからなかった場合のみ、参考として現在日時を表示
+                        const tradingDate = getJSTTradingDate();
+                        dateStr = `${tradingDate.getUTCFullYear()}年${tradingDate.getUTCMonth() + 1}月${tradingDate.getUTCDate()}日`;
+                    }
                     resultsTitle.textContent = `${methodNames[selectedMethod]} - ${data.count}銘柄検出（${dateStr}）`;
                     
                     if (data.success && data.results.length > 0) {

@@ -79,10 +79,11 @@ def get_latest_screening_results(screening_type, market='all'):
         
         if not screening_results.data or len(screening_results.data) == 0:
             print(f"⚠️ {screening_type}の最新結果が見つかりません", file=sys.stderr)
-            return []
+            return [], None
         
         # 市場フィルターに合致する結果を探す
         screening_result_id = None
+        selected_date = None
         for result in screening_results.data:
             result_market = result.get('market_filter')
             print(f"   候補: ID={result['id'][:8]}..., Date={result['screening_date']}, Market={result_market}, Count={result['total_stocks_found']}", file=sys.stderr)
@@ -91,16 +92,19 @@ def get_latest_screening_results(screening_type, market='all'):
             if market == 'all':
                 if result_market == 'all' or result_market is None:
                     screening_result_id = result['id']
+                    selected_date = result['screening_date']
                     print(f"   ✅ 選択: {screening_result_id[:8]}...", file=sys.stderr)
                     break
             elif result_market == market:
                 screening_result_id = result['id']
+                selected_date = result['screening_date']
                 print(f"   ✅ 選択: {screening_result_id[:8]}...", file=sys.stderr)
                 break
         
         if not screening_result_id:
             # 市場フィルターが一致しない場合は、最新のものを使用
             screening_result_id = screening_results.data[0]['id']
+            selected_date = screening_results.data[0]['screening_date']
             print(f"   ⚠️ 市場フィルター不一致、最新を使用: {screening_result_id[:8]}...", file=sys.stderr)
         
         # detected_stocksテーブルから検出銘柄を取得（コード昇順）
@@ -115,7 +119,7 @@ def get_latest_screening_results(screening_type, market='all'):
         
         if not detected_stocks.data:
             print(f"⚠️ 検出銘柄が見つかりません", file=sys.stderr)
-            return []
+            return [], selected_date
         
         # 市場フィルター適用（detected_stocksレベルで）
         if market != 'all':
@@ -179,13 +183,13 @@ def get_latest_screening_results(screening_type, market='all'):
             results.append(result)
         
         print(f"✅ {len(results)}件の銘柄を返却", file=sys.stderr)
-        return results
+        return results, selected_date
     
     except Exception as e:
         print(f"❌ Supabaseデータ取得エラー: {e}", file=sys.stderr)
         import traceback
         traceback.print_exc(file=sys.stderr)
-        return []
+        return [], None
 
 
 @app.route('/')
@@ -213,7 +217,7 @@ def api_screening():
         print(f"\n🔍 APIリクエスト受信: {method}, 市場: {market}, ボックス幅: {box_width_filter}, σ: {sigma_filter}, ストキャス: {use_stochastic}", file=sys.stderr)
         
         # Supabaseから実データを取得
-        results = get_latest_screening_results(method, market)
+        results, actual_date = get_latest_screening_results(method, market)
         
         # ゴールデンクロス手法ではボックス幅フィルターは使用しない（廃止）
         
@@ -239,7 +243,8 @@ def api_screening():
         return jsonify({
             'success': True,
             'results': results,
-            'count': len(results)
+            'count': len(results),
+            'date': actual_date  # 実際に表示しているデータの日付（フォールバック時は「今日」ではなくデータの実日付）
         })
     
     except Exception as e:
