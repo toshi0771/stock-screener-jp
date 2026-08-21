@@ -59,6 +59,13 @@ async def main():
         screener.latest_trading_date = await screener.get_latest_trading_date()
         logger.info(f"📅 最新取引日（スクリーニング用）: {screener.latest_trading_date}")
         
+        # 📦 一括事前取得: 個別取得(3700回超)の代わりに、当日分を1回のAPIコールで
+        # 全銘柄分キャッシュに反映しておく。失敗しても以降の個別取得にフォールバックする。
+        prefetch_result = await screener.prefetch_daily_snapshot(
+            screener.latest_trading_date.strftime('%Y%m%d')
+        )
+        logger.info(f"📦 一括事前取得結果: {prefetch_result['updated']}銘柄更新, {prefetch_result['failed']}銘柄失敗")
+        
         logger.info(f"同時実行数: {CONCURRENT_REQUESTS}")
         logger.info(f"EMAフィルター: {PULLBACK_EMA_FILTER}")
         logger.info(f"ストキャスティクス: {'ON' if PULLBACK_STOCHASTIC_FILTER else 'OFF'}")

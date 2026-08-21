@@ -473,6 +473,81 @@ class AsyncJQuantsClient:
             logger.warning(f"株価データ取得失敗 [{code}]: {e}")
             return None
 
+    async def get_prices_daily_quotes_by_date(self, session: aiohttp.ClientSession,
+                                                date: str, retry: int = 0):
+        """指定日の全銘柄分の株価データを1回のAPIコールで取得（ページネーション対応）
+
+        codeを指定せずdateだけを指定すると、その日にJPXへ上場している
+        全銘柄分の四本値がまとめて返ってくる。日次の差分更新（前日→当日の
+        1日分だけ）ではこちらを使うことで、銘柄ごとに3700回超APIを叩いて
+        いたのを実質1〜数回に減らせる。
+        """
+        if self.api_version == "v1" and not self.id_token:
+            await self.authenticate(session)
+
+        all_rows = []
+        pagination_key = None
+
+        try:
+            while True:
+                if self.api_version == "v2":
+                    url = f"{self.base_url}/equities/bars/daily"
+                else:
+                    url = f"{self.base_url}/prices/daily_quotes"
+
+                headers = self._get_headers()
+                params = {"date": date}
+                if pagination_key:
+                    params["pagination_key"] = pagination_key
+
+                async with session.get(url, headers=headers, params=params) as response:
+                    response.raise_for_status()
+                    data = await response.json()
+
+                    if self.api_version == "v2":
+                        rows = data.get("data") or []
+                    else:
+                        rows = data.get("daily_quotes") or []
+
+                    all_rows.extend(rows)
+                    pagination_key = data.get("pagination_key")
+
+                    if not pagination_key:
+                        break
+
+            # レート制限対応: APIコール後に待機（一括取得なので1回のみ）
+            await asyncio.sleep(API_CALL_DELAY)
+
+            if not all_rows:
+                return None
+
+            df = pd.DataFrame(all_rows)
+
+            if self.api_version == "v2":
+                column_mapping = {
+                    "Cd": "Code",
+                    "D": "Date",
+                    "O": "Open",
+                    "H": "High",
+                    "L": "Low",
+                    "C": "Close",
+                    "V": "Volume"
+                }
+                df = df.rename(columns=column_mapping)
+
+            if "Code" not in df.columns:
+                logger.warning(f"一括取得レスポンスにCode列が見つかりません [{date}]")
+                return None
+
+            return df
+
+        except Exception as e:
+            if retry < RETRY_COUNT:
+                await asyncio.sleep(RETRY_DELAY)
+                return await self.get_prices_daily_quotes_by_date(session, date, retry + 1)
+            logger.warning(f"日付一括株価データ取得失敗 [{date}]: {e}")
+            return None
+
 
 def sample_stocks_balanced(stocks, max_per_range=10):
     """
@@ -593,6 +668,35 @@ class StockScreener:
         async with aiohttp.ClientSession() as session:
             latest_date = await get_latest_trading_day(self.jq_client, session)
             return latest_date  # datetimeオブジェクトのまま返す（各run_*.pyでstrftime変換）
+
+    async def prefetch_daily_snapshot(self, date_str: str):
+        """当日分の全銘柄データを一括取得し、永続キャッシュを一気に前進させる
+
+        本来は銘柄ごとに個別取得（3700回超のAPIコール）が必要だったところを、
+        date指定のみの一括取得エンドポイントを使って実質1回のAPIコールで
+        まかなう。これをスクリーニングのメインループの前に実行しておくことで、
+        ループ内では各銘柄がほぼ「当日分キャッシュ済み」の状態で処理され、
+        個別のAPI呼び出しがほとんど発生しなくなる。
+
+        Args:
+            date_str: 対象日（YYYYMMDD形式）
+        """
+        import aiohttp
+        try:
+            async with aiohttp.ClientSession() as session:
+                snapshot_df = await self.jq_client.get_prices_daily_quotes_by_date(session, date_str)
+
+            if snapshot_df is None or len(snapshot_df) == 0:
+                logger.warning(f"⚠️ 一括取得: {date_str}のデータが空でした（休日の可能性）")
+                return {'updated': 0, 'failed': 0}
+
+            logger.info(f"📦 一括取得成功: {date_str} - {len(snapshot_df)}行（全銘柄分）")
+            result = await self.persistent_cache.bulk_update_from_snapshot(snapshot_df)
+            return result
+
+        except Exception as e:
+            logger.warning(f"⚠️ 一括取得に失敗しました（個別取得にフォールバックします）: {e}")
+            return {'updated': 0, 'failed': 0}
     
     def calculate_ema(self, series, period):
         """EMAを計算"""

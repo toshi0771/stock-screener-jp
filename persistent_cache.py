@@ -340,6 +340,48 @@ class PersistentPriceCache:
             self.misses += 1
             return None
     
+    async def bulk_update_from_snapshot(self, snapshot_df: pd.DataFrame) -> dict:
+        """
+        「1日分・全銘柄」のDataFrame（date-onlyの一括APIコールで取得したもの）を
+        銘柄コードごとに分割し、それぞれの永続キャッシュファイルにマージする。
+
+        毎日の差分更新で、銘柄ごとに370日分などの広い範囲を個別に再取得する
+        代わりに、この1日分の一括データで全銘柄のキャッシュを一気に「当日分」
+        まで前進させる。これによりAPIコール回数を銘柄数(3700+)から実質1回に
+        減らせる。
+
+        Args:
+            snapshot_df: Code列を含む、1日分・全銘柄のDataFrame
+
+        Returns:
+            {'updated': 更新できた銘柄数, 'failed': 失敗した銘柄数}
+        """
+        if snapshot_df is None or len(snapshot_df) == 0:
+            return {'updated': 0, 'failed': 0}
+
+        if 'Code' not in snapshot_df.columns or 'Date' not in snapshot_df.columns:
+            logger.warning("bulk_update_from_snapshot: Code/Date列が見つかりません")
+            return {'updated': 0, 'failed': 0}
+
+        updated = 0
+        failed = 0
+        date_str = pd.to_datetime(snapshot_df['Date'].iloc[0]).strftime('%Y%m%d')
+
+        for code, group_df in snapshot_df.groupby('Code'):
+            try:
+                stock_code = str(code)
+                ok = await self.set(stock_code, date_str, date_str, group_df.copy())
+                if ok:
+                    updated += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                logger.debug(f"一括キャッシュ更新失敗 [{code}]: {e}")
+                failed += 1
+
+        logger.info(f"📦 一括キャッシュ更新完了: {updated}銘柄成功, {failed}銘柄失敗 (日付: {date_str})")
+        return {'updated': updated, 'failed': failed}
+
     async def set(
         self,
         stock_code: str,
