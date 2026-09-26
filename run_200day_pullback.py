@@ -33,7 +33,7 @@ async def main():
         # 営業日チェック
         import aiohttp
         async with aiohttp.ClientSession() as session:
-            is_trading = await screener.client.is_trading_day(session, target_date)
+            is_trading = await screener.price_client.is_trading_day(session, target_date)
             
             if not is_trading:
                 if is_manual:
