@@ -54,12 +54,21 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# ─────────────────────────────────────────────────────────
+# データソース切り替えスイッチ
+#   "yfinance" : Yahoo Finance（無料・16:00 JST頃にデータ確定）
+#   "jquants"  : J-Quants API（有料・23:30 JST頃にデータ確定）
+# ─────────────────────────────────────────────────────────
+DATA_SOURCE = "yfinance"
+
 # 設定
-CONCURRENT_REQUESTS = 1  # 同時実行数（レート制限対応: 安全のため1に戻す）
+# yfinance: レート制限が緩いため並列数を増やせる / ディレイ不要
+# jquants:  Lightプラン 60req/分のため並列1・ディレイ1.2秒
+CONCURRENT_REQUESTS = 5 if DATA_SOURCE == "yfinance" else 1
 HISTORY_DAYS = 90
 RETRY_COUNT = 3
 RETRY_DELAY = 2
-API_CALL_DELAY = 1.2  # APIコール間の待機時間（秒）（1並列×1.2秒 = 50req/分以内、Lightプラン上限60req/分に対し安全マージンあり）
+API_CALL_DELAY = 0.0 if DATA_SOURCE == "yfinance" else 1.2
 
 
 def safe_float(value, default=None):
@@ -651,7 +660,15 @@ class StockScreener:
     """株式スクリーニングクラス"""
     
     def __init__(self):
-        self.jq_client = AsyncJQuantsClient()
+        self.jq_client = AsyncJQuantsClient()  # 銘柄一覧取得・jQuants時の価格取得に使用
+        # データソースに応じて価格取得クライアントを切り替え
+        if DATA_SOURCE == "yfinance":
+            from yfinance_client import YFinanceClient
+            self.price_client = YFinanceClient()
+            logger.info(f"📡 データソース: yfinance（Yahoo Finance）")
+        else:
+            self.price_client = self.jq_client
+            logger.info(f"📡 データソース: J-Quants API")
         self.client = self.jq_client  # ラッパースクリプトとの互換性のため
         self.sb_client = SupabaseClient()
         self.session = None
@@ -662,12 +679,25 @@ class StockScreener:
     
     async def get_latest_trading_date(self):
         """最新の取引日を取得（検出銘柄の有無に関わらず）"""
-        from trading_day_helper import get_latest_trading_day
         import aiohttp
-        
-        async with aiohttp.ClientSession() as session:
-            latest_date = await get_latest_trading_day(self.jq_client, session)
-            return latest_date  # datetimeオブジェクトのまま返す（各run_*.pyでstrftime変換）
+        if DATA_SOURCE == "yfinance":
+            # トヨタの最新データ日付から取引日を判定
+            async with aiohttp.ClientSession() as session:
+                end = datetime.now()
+                start = end - timedelta(days=10)
+                df = await self.price_client.get_prices_daily_quotes(
+                    session, "7203",
+                    start.strftime('%Y%m%d'), end.strftime('%Y%m%d')
+                )
+                if df is not None and not df.empty:
+                    latest_str = str(df['Date'].iloc[-1])
+                    return datetime.strptime(latest_str[:10], '%Y-%m-%d')
+            return datetime.now()
+        else:
+            from trading_day_helper import get_latest_trading_day
+            async with aiohttp.ClientSession() as session:
+                latest_date = await get_latest_trading_day(self.jq_client, session)
+                return latest_date
 
     async def prefetch_daily_snapshot(self, date_str: str):
         """当日分の全銘柄データを一括取得し、永続キャッシュを一気に前進させる
@@ -684,7 +714,14 @@ class StockScreener:
         import aiohttp
         try:
             async with aiohttp.ClientSession() as session:
-                snapshot_df = await self.jq_client.get_prices_daily_quotes_by_date(session, date_str)
+                if DATA_SOURCE == "yfinance":
+                    # yfinanceでは銘柄コードリストが必要
+                    stock_codes = [s["Code"] for s in await self.get_stocks_list()]
+                    snapshot_df = await self.price_client.get_prices_daily_quotes_by_date(
+                        session, date_str, stock_codes=stock_codes
+                    )
+                else:
+                    snapshot_df = await self.jq_client.get_prices_daily_quotes_by_date(session, date_str)
 
             if snapshot_df is None or len(snapshot_df) == 0:
                 logger.warning(f"⚠️ 一括取得: {date_str}のデータが空でした（休日の可能性）")
@@ -801,7 +838,7 @@ class StockScreener:
 
             df = await self.persistent_cache.get_or_fetch_incremental(
                 code, start_str, end_str,
-                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                lambda f, t: self.price_client.get_prices_daily_quotes(session, code, f, t),
                 max_age_days=60
             )
 
@@ -943,7 +980,7 @@ class StockScreener:
             # 永続キャッシュから取得を試みる（不足分のみ差分取得）
             df = await self.persistent_cache.get_or_fetch_incremental(
                 code, start_str, end_str,
-                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                lambda f, t: self.price_client.get_prices_daily_quotes(session, code, f, t),
                 max_age_days=60
             )
             
@@ -1047,7 +1084,7 @@ class StockScreener:
             # 永続キャッシュから取得を試みる（不足分のみ差分取得）
             df = await self.persistent_cache.get_or_fetch_incremental(
                 code, start_str, end_str,
-                lambda f, t: self.jq_client.get_prices_daily_quotes(session, code, f, t),
+                lambda f, t: self.price_client.get_prices_daily_quotes(session, code, f, t),
                 max_age_days=220
             )
             
@@ -1531,7 +1568,7 @@ async def main():
             await screener.jq_client.authenticate(session)
             
             # 営業日かどうかを確認
-            is_trading = await screener.jq_client.is_trading_day(session, today)
+            is_trading = await screener.price_client.is_trading_day(session, today)
             
             if not is_trading:
                 logger.info("=" * 60)
