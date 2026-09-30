@@ -38,6 +38,7 @@ async def main():
                 if is_manual:
                     logger.warning(f"⚠️  {target_date}は休日ですが、手動実行のため処理を続行します")
                 else:
+                    logger.info(f"ℹ️ {target_date}は取引日ではないため終了します")
                     return
         
         logger.info(f"✅ 実行日: {target_date}")

@@ -320,6 +320,9 @@ class AsyncJQuantsClient:
                 params["date"] = date
             
             async with session.get(url, headers=headers, params=params) as response:
+                if response.status != 200:
+                    body = await response.text()
+                    logger.error(f"銘柄一覧API HTTP {response.status}: {body[:300]}")
                 response.raise_for_status()
                 data = await response.json()
                 
@@ -778,6 +781,11 @@ class StockScreener:
         async with aiohttp.ClientSession(connector=connector) as session:
             await self.jq_client.authenticate(session)
             all_stocks_data = await self.jq_client.get_listed_info(session, date=target_date_str)
+            
+            if not all_stocks_data:
+                # 契約プランの対象期間外だと日付指定は400になる。日付なし（提供される最新分）で再試行
+                logger.warning("⚠️ 日付指定の銘柄一覧取得に失敗。日付なし（最新提供分）で再試行します")
+                all_stocks_data = await self.jq_client.get_listed_info(session)
             
             if not all_stocks_data:
                 return []

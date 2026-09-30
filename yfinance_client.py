@@ -216,10 +216,15 @@ class YFinanceClient:
                 return False
             start = (dt - timedelta(days=1)).strftime('%Y-%m-%d')
             end = (dt + timedelta(days=1)).strftime('%Y-%m-%d')
-            df = await asyncio.to_thread(_fetch_single_sync, "7203.T", start, end)
-            if df is None or df.empty:
-                return False
-            return date in df['Date'].values
+            for attempt in range(3):
+                df = await asyncio.to_thread(_fetch_single_sync, "7203.T", start, end)
+                if df is not None and not df.empty:
+                    return date in df['Date'].values
+                logger.warning(f"yfinance 取引日チェック: データ空 (試行{attempt + 1}/3)")
+                await asyncio.sleep(3)
+            # 平日なのにYahoo側が空を返し続けた場合は、休日扱いで黙って終了せず続行する
+            logger.warning("yfinance 取引日チェック: 3回失敗。平日のため実行を続行します")
+            return True
         except Exception as e:
             logger.warning(f"yfinance 取引日チェック失敗: {e}")
             return True
