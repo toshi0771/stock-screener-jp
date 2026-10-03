@@ -773,7 +773,10 @@ class StockScreener:
         return market_map.get(code, code)
     
     async def get_stocks_list(self):
-        """銘柄リストを取得してフィルタリング"""
+        """銘柄リストを取得してフィルタリング（同一実行内では1回だけ取得して使い回す）"""
+        if getattr(self, "_stocks_list_cache", None):
+            return self._stocks_list_cache
+        
         today = datetime.now().strftime('%Y-%m-%d')
         target_date_str = today.replace("-", "")
         
@@ -792,7 +795,8 @@ class StockScreener:
             
             market_field = "Mkt" if self.jq_client.api_version == "v2" else "MarketCode"
             market_codes = {"0111": "プライム", "0112": "スタンダード", "0113": "グロース"}
-            return [s for s in all_stocks_data if s.get(market_field) in market_codes]
+            self._stocks_list_cache = [s for s in all_stocks_data if s.get(market_field) in market_codes]
+            return self._stocks_list_cache
 
     async def screen_stock_breakout(self, stock: Dict, session: aiohttp.ClientSession) -> Optional[Dict]:
         """ハンマー（下髭）型スクリーニング
