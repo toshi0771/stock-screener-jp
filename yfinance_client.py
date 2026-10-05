@@ -71,6 +71,33 @@ def _normalize_single(df: pd.DataFrame) -> Optional[pd.DataFrame]:
         return None
 
 
+def is_tse_closed(d) -> bool:
+    """東証の休場日か（土日・祝日・年末年始 12/31, 1/1-1/3）。dはdateまたはdatetime。"""
+    if hasattr(d, "date"):
+        d = d.date()
+    if d.weekday() >= 5:
+        return True
+    if (d.month == 12 and d.day == 31) or (d.month == 1 and d.day <= 3):
+        return True
+    try:
+        import jpholiday
+        return bool(jpholiday.is_holiday(d))
+    except ImportError:
+        logger.warning("jpholiday未インストールのため祝日判定をスキップします")
+        return False
+
+
+def expected_latest_trading_date(d):
+    """d以前で最も新しい東証の営業日（dが営業日ならd自身）を返す。"""
+    cur = d
+    for _ in range(14):
+        if not is_tse_closed(cur):
+            return cur
+        cur = cur - timedelta(days=1)
+    return cur
+
+
+
 def _fetch_single_sync(ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
     """1銘柄のOHLCVを同期取得。"""
     try:
@@ -209,24 +236,17 @@ class YFinanceClient:
             return None
 
     async def is_trading_day(self, session, date: str) -> bool:
-        """指定日が取引日かどうか確認（jQuantsClientとの互換）。"""
+        """指定日が東証の営業日かどうか（カレンダー判定）。
+
+        Yahoo側のデータ反映遅れと本当の休場日はデータの有無だけでは区別できないため、
+        営業日判定は土日・祝日・年末年始のカレンダーで行う。
+        当日分の日足がYahooに出揃っているかは、別途 ensure_latest_data_ready() で確認する。
+        """
         try:
             dt = datetime.strptime(date, '%Y-%m-%d')
-            if dt.weekday() >= 5:
-                return False
-            start = (dt - timedelta(days=1)).strftime('%Y-%m-%d')
-            end = (dt + timedelta(days=1)).strftime('%Y-%m-%d')
-            for attempt in range(3):
-                df = await asyncio.to_thread(_fetch_single_sync, "7203.T", start, end)
-                if df is not None and not df.empty:
-                    return date in df['Date'].values
-                logger.warning(f"yfinance 取引日チェック: データ空 (試行{attempt + 1}/3)")
-                await asyncio.sleep(3)
-            # 平日なのにYahoo側が空を返し続けた場合は、休日扱いで黙って終了せず続行する
-            logger.warning("yfinance 取引日チェック: 3回失敗。平日のため実行を続行します")
-            return True
+            return not is_tse_closed(dt)
         except Exception as e:
-            logger.warning(f"yfinance 取引日チェック失敗: {e}")
+            logger.warning(f"取引日チェック失敗: {e}")
             return True
 
     async def authenticate(self, session):

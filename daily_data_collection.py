@@ -695,12 +695,41 @@ class StockScreener:
                 if df is not None and not df.empty:
                     latest_str = str(df['Date'].iloc[-1])
                     return datetime.strptime(latest_str[:10], '%Y-%m-%d')
-            return datetime.now()
+            # Yahooから1件も取れなかった場合。今日の日付で代用すると古い/空のデータを
+            # 当日分として保存してしまうため、Noneを返して呼び出し側（ensure_latest_data_ready）で扱う
+            logger.error("❌ yfinanceからトヨタの日足を取得できませんでした（最新取引日を判定できません）")
+            return None
         else:
             from trading_day_helper import get_latest_trading_day
             async with aiohttp.ClientSession() as session:
                 latest_date = await get_latest_trading_day(self.jq_client, session)
                 return latest_date
+
+    async def ensure_latest_data_ready(self, target_date: str, max_retries: int = 4, interval_sec: int = 600) -> bool:
+        """yfinanceに target_date 以前の最新営業日分の日足が出揃っているか確認する。
+
+        Yahoo側の反映が遅れていると、古い日付（例: 金曜）のデータを当日分として保存してしまう。
+        それを防ぐため、未反映なら待って再確認し、最後まで未反映ならFalseを返す（保存しない）。
+        """
+        if DATA_SOURCE != "yfinance":
+            return True
+        from yfinance_client import expected_latest_trading_date
+        expected = expected_latest_trading_date(datetime.strptime(target_date, '%Y-%m-%d')).date()
+        for attempt in range(max_retries + 1):
+            latest = self.latest_trading_date.date() if self.latest_trading_date else None
+            if latest is not None and latest >= expected:
+                logger.info(f"✅ yfinanceに{expected}分の日足を確認しました")
+                return True
+            if attempt == max_retries:
+                break
+            logger.warning(
+                f"⚠️ yfinanceに{expected}分の日足がまだありません（最新: {latest}）。"
+                f"{interval_sec // 60}分待って再確認します ({attempt + 1}/{max_retries})"
+            )
+            await asyncio.sleep(interval_sec)
+            self.latest_trading_date = await self.get_latest_trading_date()
+        logger.error(f"❌ yfinanceに{expected}分の日足が反映されていません。古い日付での保存を避けるため終了します")
+        return False
 
     async def prefetch_daily_snapshot(self, date_str: str):
         """当日分の全銘柄データを一括取得し、永続キャッシュを一気に前進させる

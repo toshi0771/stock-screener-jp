@@ -11,3 +11,4 @@ aiohttp==3.9.1
 pytz==2024.1
 psutil==5.9.8
 yfinance>=0.2.40
+jpholiday>=0.1.10

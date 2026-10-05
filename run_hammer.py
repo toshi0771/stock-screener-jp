@@ -60,6 +60,10 @@ async def main():
         screener.latest_trading_date = await screener.get_latest_trading_date()
         logger.info(f"📅 最新取引日（スクリーニング用）: {screener.latest_trading_date}")
         
+        # 当日分の日足がYahooに反映されているか確認（未反映なら待機→それでも無ければ古い日付で保存せず終了）
+        if not await screener.ensure_latest_data_ready(target_date):
+            sys.exit(1)
+        
         # 📦 一括事前取得: 個別取得(3700回超)の代わりに、当日分を1回のAPIコールで
         # 全銘柄分キャッシュに反映しておく。失敗しても以降の個別取得にフォールバックする。
         prefetch_result = await screener.prefetch_daily_snapshot(

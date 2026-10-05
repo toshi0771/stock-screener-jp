@@ -41,11 +41,11 @@ def get_latest_screening_results(screening_type, market='all'):
         
         # 最新のスクリーニング結果を取得
         # ・当日データがあれば当日を表示
-        # ・当日データがなければ直近1件を表示（夜間実行→翌日昼間閲覧に対応）
+        # ・当日データがなければ直近1件を表示（夜間実行→翌日昼間閲覧、週末・連休明けに対応）
         # サーバーはUTCのため、JST（UTC+9）に変換して正しい日付を取得
         d_jst = datetime.utcnow() + timedelta(hours=9)
         today_str = d_jst.strftime('%Y-%m-%d')
-        three_days_ago = (d_jst - timedelta(days=3)).strftime('%Y-%m-%d')
+        three_days_ago = (d_jst - timedelta(days=7)).strftime('%Y-%m-%d')  # 週末・連休明けでも直近の取引日が入るよう7日
         print(f"   当日取引日(JST): {today_str}", file=sys.stderr)
         
         # まず当日データを検索
