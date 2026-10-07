@@ -705,30 +705,65 @@ class StockScreener:
                 latest_date = await get_latest_trading_day(self.jq_client, session)
                 return latest_date
 
-    async def ensure_latest_data_ready(self, target_date: str, max_retries: int = 4, interval_sec: int = 600) -> bool:
-        """yfinanceに target_date 以前の最新営業日分の日足が出揃っているか確認する。
+    def _cached_latest_date(self):
+        """永続キャッシュ（トヨタ）に入っている最終日。取得できなければNone。
 
-        Yahoo側の反映が遅れていると、古い日付（例: 金曜）のデータを当日分として保存してしまう。
-        それを防ぐため、未反映なら待って再確認し、最後まで未反映ならFalseを返す（保存しない）。
+        直前に動いた手法（ハンマー等）が全銘柄の当日分をキャッシュに保存しているため、
+        Yahooに問い合わせ直さなくても、当日分が揃っているかをここで確認できる。
+        """
+        try:
+            for code in ("72030", "7203"):
+                res = self.persistent_cache._load_cache_data(self.persistent_cache._get_cache_path(code))
+                if res:
+                    return datetime.strptime(res[1], '%Y%m%d')
+        except Exception as e:
+            logger.warning(f"キャッシュ最終日の確認に失敗: {e}")
+        return None
+
+    async def ensure_latest_data_ready(self, target_date: str, max_retries: int = 4, interval_sec: int = 600) -> bool:
+        """target_date 以前の最新営業日分の日足が出揃っているか確認する。
+
+        - 場中（日本時間16時前）に当日分を取ると未確定の足で計算してしまうため、その場合は終了する。
+        - Yahooに当日分がまだ無くても、前の手法が保存した永続キャッシュに当日分があれば、それを使う。
+        - どちらも無ければ待って再確認し、最後まで揃わなければFalse（古い日付で保存しない）。
         """
         if DATA_SOURCE != "yfinance":
             return True
         from yfinance_client import expected_latest_trading_date
         expected = expected_latest_trading_date(datetime.strptime(target_date, '%Y-%m-%d')).date()
+
+        now_jst = datetime.utcnow() + timedelta(hours=9)
+        if expected == now_jst.date() and (now_jst.hour, now_jst.minute) < (16, 0):
+            logger.error(
+                f"❌ 場中（日本時間{now_jst.strftime('%H:%M')}）のため、{expected}分は未確定の足になります。"
+                "日本時間16時以降に実行してください"
+            )
+            return False
+
         for attempt in range(max_retries + 1):
             latest = self.latest_trading_date.date() if self.latest_trading_date else None
             if latest is not None and latest >= expected:
                 logger.info(f"✅ yfinanceに{expected}分の日足を確認しました")
                 return True
+
+            cached = self._cached_latest_date()
+            if cached is not None and cached.date() >= expected:
+                logger.warning(
+                    f"⚠️ yfinanceに{expected}分の日足はありませんが、前の手法が保存したキャッシュに"
+                    f"{cached.date()}分があるため、キャッシュのデータで続行します"
+                )
+                self.latest_trading_date = cached
+                return True
+
             if attempt == max_retries:
                 break
             logger.warning(
-                f"⚠️ yfinanceに{expected}分の日足がまだありません（最新: {latest}）。"
+                f"⚠️ yfinanceにも、キャッシュにも{expected}分の日足がまだありません（最新: {latest}）。"
                 f"{interval_sec // 60}分待って再確認します ({attempt + 1}/{max_retries})"
             )
             await asyncio.sleep(interval_sec)
             self.latest_trading_date = await self.get_latest_trading_date()
-        logger.error(f"❌ yfinanceに{expected}分の日足が反映されていません。古い日付での保存を避けるため終了します")
+        logger.error(f"❌ {expected}分の日足が反映されていません。古い日付での保存を避けるため終了します")
         return False
 
     async def prefetch_daily_snapshot(self, date_str: str):
