@@ -58,11 +58,72 @@
             letter-spacing: 0.5px;
         }
         
+        .brand {
+            display: flex;
+            align-items: center;
+            gap: 14px;
+            margin-bottom: 10px;
+        }
+
+        .brand-icon {
+            width: 64px;
+            height: 64px;
+            flex-shrink: 0;
+            display: block;
+        }
+
         h1 {
             color: #333;
             font-size: 28px;
-            margin-bottom: 10px;
+            margin: 0;
         }
+
+        .share-area {
+            margin-bottom: 14px;
+        }
+
+        .share-label {
+            font-size: 12px;
+            color: #9fb0c3;
+            margin-bottom: 10px;
+            letter-spacing: 0.8px;
+        }
+
+        .share-buttons {
+            display: flex;
+            justify-content: center;
+            gap: 16px;
+        }
+
+        .share-btn {
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.12);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: background 0.2s ease, transform 0.2s ease;
+        }
+
+        .share-btn svg {
+            width: 20px;
+            height: 20px;
+            fill: #dbe4ee;
+            transition: fill 0.2s ease;
+        }
+
+        .share-btn:hover {
+            transform: translateY(-2px);
+        }
+
+        .share-btn:hover svg {
+            fill: #fff;
+        }
+
+        .share-x:hover { background: #000; }
+        .share-facebook:hover { background: #1877F2; }
+        .share-line:hover { background: #06C755; }
         
         .subtitle {
             color: #666;
@@ -364,7 +425,10 @@
     <div class="container">
         <header>
             <a class="dev-credit" href="https://alegriajp.com/" target="_blank" rel="noopener noreferrer">開発元：alegria</a>
-            <h1>株式スクリーニング</h1>
+            <div class="brand">
+                <img class="brand-icon" src="{{ url_for('static', filename='kabusuku-icon.png') }}" alt="株スク" width="64" height="64">
+                <h1>株スク</h1>
+            </div>
             <p class="subtitle">スイングトレード上昇銘柄を3つの手法で一発検索</p>
             <p style="color: #d9534f; font-size: 14px; margin-top: 15px; padding: 10px; background: #fff3cd; border-left: 4px solid #ffc107; border-radius: 4px;">
                 <strong>ご注意：</strong>GitHub Actionsの実行遅延により、3手法全部の当日データ取得が24時を越えることがあります。
@@ -881,6 +945,14 @@
         }
     </script>
     <footer>
+        <div class="share-area">
+            <p class="share-label">このツールをシェア</p>
+            <div class="share-buttons">
+                <a class="share-btn share-x" href="https://twitter.com/intent/tweet?text=%E4%B8%8A%E6%98%87%E6%A0%AA%E3%82%923%E3%81%A4%E3%81%AE%E6%89%8B%E6%B3%95%E3%81%A7%E4%B8%80%E7%99%BA%E6%A4%9C%E7%B4%A2%E3%81%A7%E3%81%8D%E3%82%8B%E3%83%84%E3%83%BC%E3%83%AB%E3%81%8C%E4%BE%BF%E5%88%A9%E3%81%99%E3%81%8E%E3%82%8B%EF%BC%81%EF%BC%81%E5%8B%95%E7%94%BB%E3%81%A7%E4%BD%BF%E3%81%84%E6%96%B9%E3%82%82%E3%82%8F%E3%81%8B%E3%82%8B%E3%81%AE%E3%81%A7%E3%81%8A%E3%81%99%E3%81%99%E3%82%81%E3%81%A7%E3%81%99%F0%9F%93%88%0A%0A%F0%9F%93%BAYouTube%EF%BC%9Ahttps%3A%2F%2Fwww.youtube.com%2F%40kabusuku%0A%F0%9F%9A%80%E3%83%84%E3%83%BC%E3%83%AB%EF%BC%9Ahttps%3A%2F%2Fstock-screener-jp.onrender.com%2F%0A%23%E6%A0%AA%E3%82%B9%E3%82%AF%20%23%E6%A0%AA%E5%BC%8F%E6%8A%95%E8%B3%87%20%23%E3%82%B9%E3%82%A4%E3%83%B3%E3%82%B0%E3%83%88%E3%83%AC%E3%83%BC%E3%83%89" target="_blank" rel="noopener noreferrer" aria-label="Xでシェア" title="Xでシェア"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg></a>
+                <a class="share-btn share-facebook" href="https://www.facebook.com/sharer/sharer.php?u=https%3A//stock-screener-jp.onrender.com/" target="_blank" rel="noopener noreferrer" aria-label="Facebookでシェア" title="Facebookでシェア"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/></svg></a>
+                <a class="share-btn share-line" href="https://social-plugins.line.me/lineit/share?url=https%3A//stock-screener-jp.onrender.com/&amp;text=%E4%B8%8A%E6%98%87%E6%A0%AA%E3%82%923%E3%81%A4%E3%81%AE%E6%89%8B%E6%B3%95%E3%81%A7%E4%B8%80%E7%99%BA%E6%A4%9C%E7%B4%A2%E3%81%A7%E3%81%8D%E3%82%8B%E3%83%84%E3%83%BC%E3%83%AB%E3%81%8C%E4%BE%BF%E5%88%A9%E3%81%99%E3%81%8E%E3%82%8B%EF%BC%81%EF%BC%81%E5%8B%95%E7%94%BB%E3%81%A7%E4%BD%BF%E3%81%84%E6%96%B9%E3%82%82%E3%82%8F%E3%81%8B%E3%82%8B%E3%81%AE%E3%81%A7%E3%81%8A%E3%81%99%E3%81%99%E3%82%81%E3%81%A7%E3%81%99%F0%9F%93%88%0A%0A%F0%9F%93%BAYouTube%EF%BC%9Ahttps%3A//www.youtube.com/%40kabusuku%0A%F0%9F%9A%80%E3%83%84%E3%83%BC%E3%83%AB%EF%BC%9Ahttps%3A//stock-screener-jp.onrender.com/%0A%23%E6%A0%AA%E3%82%B9%E3%82%AF%20%23%E6%A0%AA%E5%BC%8F%E6%8A%95%E8%B3%87%20%23%E3%82%B9%E3%82%A4%E3%83%B3%E3%82%B0%E3%83%88%E3%83%AC%E3%83%BC%E3%83%89" target="_blank" rel="noopener noreferrer" aria-label="LINEでシェア" title="LINEでシェア"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.365 9.863c.349 0 .63.285.63.631 0 .345-.281.63-.63.63H17.61v1.125h1.755c.349 0 .63.283.63.63 0 .344-.281.629-.63.629h-2.386c-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63h2.386c.346 0 .627.285.627.63 0 .349-.281.63-.63.63H17.61v1.125h1.755zm-3.855 3.016c0 .27-.174.51-.432.596-.064.021-.133.031-.199.031-.211 0-.391-.09-.51-.25l-2.443-3.317v2.94c0 .344-.279.629-.631.629-.346 0-.626-.285-.626-.629V8.108c0-.27.173-.51.43-.595.06-.023.136-.033.194-.033.195 0 .375.104.495.254l2.462 3.33V8.108c0-.345.282-.63.63-.63.345 0 .63.285.63.63v4.771zm-5.741 0c0 .344-.282.629-.631.629-.345 0-.627-.285-.627-.629V8.108c0-.345.282-.63.63-.63.346 0 .628.285.628.63v4.771zm-2.466.629H4.917c-.345 0-.63-.285-.63-.629V8.108c0-.345.285-.63.63-.63.348 0 .63.285.63.63v4.141h1.756c.348 0 .629.283.629.63 0 .344-.282.629-.629.629M24 10.314C24 4.943 18.615.572 12 .572S0 4.943 0 10.314c0 4.811 4.27 8.842 10.035 9.608.391.082.923.258 1.058.59.12.301.079.766.038 1.08l-.164 1.02c-.045.301-.24 1.186 1.049.645 1.291-.539 6.916-4.078 9.436-6.975C23.176 14.393 24 12.458 24 10.314"/></svg></a>
+            </div>
+        </div>
         &copy;2026 alegria all rights reserved
     </footer>
 </body>
