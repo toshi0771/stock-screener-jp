@@ -4,6 +4,9 @@ on:
   schedule:
     # 平日 16:30 JST (07:30 UTC) - yfinance使用のため早期実行可能
     - cron: '30 7 * * 1-5'
+    # 朝の再実行 04:47 / 06:47 JST（夜の実行が保存済みなら自動でスキップ）
+    - cron: '47 19 * * 1-5'
+    - cron: '47 21 * * 1-5'
   workflow_dispatch:
 
 concurrency:

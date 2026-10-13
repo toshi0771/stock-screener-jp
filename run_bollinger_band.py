@@ -41,6 +41,10 @@ async def main():
                     return
         
         logger.info(f"✅ 実行日: {target_date}")
+        
+        # 定時実行で、夜の実行が保存済み、または場中の起動なら何もせず終了（朝の再実行用）
+        if screener.should_skip_scheduled_run("bollinger_band", target_date, trigger):
+            return
         logger.info("📊 Supabase接続成功")
         
         # 銘柄一覧取得

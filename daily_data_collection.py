@@ -111,6 +111,22 @@ class SupabaseClient:
                 logger.error(f"Supabase接続失敗: {e}")
                 self.enabled = False
     
+    def has_screening_result(self, screening_type, date):
+        """指定の手法・日付のスクリーニング結果が保存済みか。確認できない場合はFalse。"""
+        if not self.enabled:
+            return False
+        try:
+            result = (self.client.table("screening_results")
+                      .select("id")
+                      .eq("screening_type", screening_type)
+                      .eq("screening_date", date)
+                      .limit(1)
+                      .execute())
+            return bool(result.data)
+        except Exception as e:
+            logger.warning(f"保存済みチェックに失敗（続行します）: {e}")
+            return False
+
     def save_screening_result(self, screening_type, date, total_stocks, execution_time_ms=0):
         """スクリーニング結果の概要を保存"""
         if not self.enabled:
@@ -704,6 +720,27 @@ class StockScreener:
             async with aiohttp.ClientSession() as session:
                 latest_date = await get_latest_trading_day(self.jq_client, session)
                 return latest_date
+
+    def should_skip_scheduled_run(self, screening_type: str, target_date: str, trigger: str) -> bool:
+        """定時実行（schedule）のとき、今回の実行が不要ならTrueを返す。手動実行は常にFalse。
+
+        朝の再実行用に、次の2つの場合はスキップする。
+        - 夜の実行で、その日のデータが保存済み
+        - 日本時間16時前（場中）に起動した（未確定の足になるため、夜の定時実行に任せる）
+        """
+        if trigger != 'schedule' or DATA_SOURCE != "yfinance":
+            return False
+        from yfinance_client import expected_latest_trading_date
+        expected = expected_latest_trading_date(datetime.strptime(target_date, '%Y-%m-%d')).date()
+
+        now_jst = datetime.utcnow() + timedelta(hours=9)
+        if expected == now_jst.date() and (now_jst.hour, now_jst.minute) < (16, 0):
+            logger.info(f"ℹ️ 場中（日本時間{now_jst.strftime('%H:%M')}）に起動したため、今回は実行しません")
+            return True
+        if self.sb_client.has_screening_result(screening_type, expected.strftime('%Y-%m-%d')):
+            logger.info(f"ℹ️ {expected}分の{screening_type}は保存済みのため、実行をスキップします")
+            return True
+        return False
 
     def _cached_latest_date(self):
         """永続キャッシュ（トヨタ）に入っている最終日。取得できなければNone。
