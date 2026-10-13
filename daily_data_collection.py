@@ -93,6 +93,14 @@ def safe_int(value, default=None):
         return default
 
 
+# ログ表示用の手法名（DBの screening_type は変更しない）
+SCREENING_TYPE_LABELS = {
+    "breakout": "ハンマー",
+    "bollinger_band": "ボリンジャーバンド",
+    "200day_pullback": "200日新高値押し目",
+}
+
+
 class SupabaseClient:
     """Supabase クライアント"""
     
@@ -143,11 +151,11 @@ class SupabaseClient:
             }
             
             result = self.client.table("screening_results").insert(data).execute()
-            logger.info(f"Supabase保存成功: {screening_type} - {total_stocks}銘柄")
+            logger.info(f"Supabase保存成功: {SCREENING_TYPE_LABELS.get(screening_type, screening_type)} - {total_stocks}銘柄")
             return result.data[0]["id"] if result.data else None
             
         except Exception as e:
-            logger.error(f"Supabase保存エラー ({screening_type}): {e}")
+            logger.error(f"Supabase保存エラー ({SCREENING_TYPE_LABELS.get(screening_type, screening_type)}): {e}")
             return None
     
     def save_detected_stocks(self, screening_result_id, stocks):
@@ -738,7 +746,7 @@ class StockScreener:
             logger.info(f"ℹ️ 場中（日本時間{now_jst.strftime('%H:%M')}）に起動したため、今回は実行しません")
             return True
         if self.sb_client.has_screening_result(screening_type, expected.strftime('%Y-%m-%d')):
-            logger.info(f"ℹ️ {expected}分の{screening_type}は保存済みのため、実行をスキップします")
+            logger.info(f"ℹ️ {expected}分の{SCREENING_TYPE_LABELS.get(screening_type, screening_type)}は保存済みのため、実行をスキップします")
             return True
         return False
 
