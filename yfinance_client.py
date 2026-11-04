@@ -97,6 +97,22 @@ def expected_latest_trading_date(d):
     return cur
 
 
+def default_target_date(now_utc=None) -> str:
+    """実行の対象日（日足が確定している最新の営業日）を YYYY-MM-DD で返す。
+
+    日本時間16時（Yahooの日足が確定する頃）を区切りにする。
+    - 16時以降: 今日以前で最も新しい営業日
+    - 16時より前: 昨日以前で最も新しい営業日
+    UTCの日付で決めると、日本時間9時（UTC 0時）を過ぎた朝の実行が、場中の当日を
+    対象にしてしまい、遅れて起動した朝の再実行が効かなくなるため、日本時間で判定する。
+    """
+    now_jst = (now_utc or datetime.utcnow()) + timedelta(hours=9)
+    base = now_jst.date()
+    if (now_jst.hour, now_jst.minute) < (16, 0):
+        base = base - timedelta(days=1)
+    return expected_latest_trading_date(base).strftime('%Y-%m-%d')
+
+
 
 def _fetch_single_sync(ticker: str, start: str, end: str) -> Optional[pd.DataFrame]:
     """1銘柄のOHLCVを同期取得。"""

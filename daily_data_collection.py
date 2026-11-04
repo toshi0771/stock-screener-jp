@@ -710,7 +710,9 @@ class StockScreener:
         if DATA_SOURCE == "yfinance":
             # トヨタの最新データ日付から取引日を判定
             async with aiohttp.ClientSession() as session:
-                end = datetime.now()
+                # 対象日（target_date_cap）が決まっていれば、それ以降の足（場中の未確定の足など）は取らない
+                cap = getattr(self, "target_date_cap", None)
+                end = datetime.strptime(cap, '%Y-%m-%d') if cap else datetime.now()
                 start = end - timedelta(days=10)
                 df = await self.price_client.get_prices_daily_quotes(
                     session, "7203",

@@ -6,6 +6,7 @@ import sys
 import os
 import pandas as pd
 from datetime import datetime, timedelta
+from yfinance_client import default_target_date
 from daily_data_collection import (
     StockScreener, 
     sample_stocks_balanced,
@@ -19,7 +20,9 @@ async def main():
     
     try:
         # 仮の実行日（後で最新取引日に更新）
-        target_date = datetime.now().strftime('%Y-%m-%d')
+        # 対象日は日本時間16時区切りで決める（遅れて起動した朝の再実行でも、前の営業日を対象にする）
+        target_date = default_target_date()
+        screener.target_date_cap = target_date  # これより新しい足（場中の未確定の足）は取得しない
         logger.info("=" * 80)
         logger.info(f"日次株式スクリーニングデータ収集開始 (並列処理・全銘柄対応・オプション機能付き)")
         logger.info("=" * 80)
