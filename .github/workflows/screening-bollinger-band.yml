@@ -8,6 +8,11 @@ on:
     - cron: '17 20 * * 1-5'
     - cron: '17 22 * * 1-5'
   workflow_dispatch:
+    inputs:
+      auto:
+        description: '外部サービスからの自動起動（trueのとき、定時実行と同じ扱い: 保存済みならスキップ）'
+        required: false
+        default: 'false'
 
 concurrency:
   group: jquants-api-access
@@ -47,6 +52,7 @@ jobs:
         JQUANTS_API_KEY: ${{ secrets.JQUANTS_API_KEY }}
         SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
         SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
+        AUTO_RUN: ${{ github.event.inputs.auto }}
       run: |
         python run_bollinger_band.py
     

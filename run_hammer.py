@@ -29,6 +29,9 @@ async def main():
         
         # 実行トリガーを判定
         trigger = os.environ.get('GITHUB_EVENT_NAME', 'unknown')
+        # 外部サービス（cron-job.org）からの自動起動（AUTO_RUN=true）は、定時実行と同じ扱いにする
+        if os.environ.get('AUTO_RUN', '').lower() == 'true':
+            trigger = 'schedule'
         is_manual = (trigger == 'workflow_dispatch')
         
         # 営業日チェック
