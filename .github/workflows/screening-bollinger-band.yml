@@ -5,8 +5,8 @@ on:
     # 平日 17:00 JST (08:00 UTC) - yfinance使用のため早期実行可能
     - cron: '0 8 * * 1-5'
     # 朝の再実行 05:17 / 07:17 JST（夜の実行が保存済みなら自動でスキップ）
-    - cron: '17 20 * * 1-5'
-    - cron: '17 22 * * 1-5'
+    # - cron: '17 20 * * 1-5'
+    # - cron: '17 22 * * 1-5'
   workflow_dispatch:
     inputs:
       auto:
